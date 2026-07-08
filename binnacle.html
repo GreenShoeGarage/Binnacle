@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<!-- BINNACLE v1.0.0 | build marker: binnacle-1-0-0 | Bus Pirate 5 browser console -->
+<!--
+  BINNACLE, a browser console for the Bus Pirate 5.
+  Copyright (C) 2026 M. B. Parks / Green Shoe Garage.
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see the file COPYING distributed
+  with this program.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BINNACLE - Bus Pirate 5 Console</title>
+<style>
+  :root{
+    --bg:#0c1013; --panel:#161c20; --panel-2:#111619; --rule:#29333a;
+    --brass:#c8a24a; --brass-dim:#8a7333; --verdigris:#52a598; --alert:#cf5b5b;
+    --ink:#d7ddd9; --muted:#8a958f; --crt-bg:#080a0b; --crt-fg:#e6be6a;
+    --lamp-off:#2b3339; --focus:#8fd0c4;
+    --cell:6px; --pad:16px; --radius:3px;
+    --ui: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  html[data-theme="contrast"]{
+    --bg:#000; --panel:#0a0a0a; --panel-2:#000; --rule:#5a6a70;
+    --brass:#ffd24a; --brass-dim:#c9a24b; --verdigris:#5fe6d2; --alert:#ff6b6b;
+    --ink:#ffffff; --muted:#c7cec9; --crt-bg:#000; --crt-fg:#ffd88a; --lamp-off:#3a4247;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--ui);
+    font-size:15px; line-height:1.45; -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  .eyebrow{
+    font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--brass); font-weight:600;
+  }
+  .muted{color:var(--muted)}
+  button{font-family:var(--ui)}
+  .btn{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--rule);
+    border-radius:var(--radius); padding:7px 12px; font-size:13px; cursor:pointer;
+    letter-spacing:.02em; transition:border-color .15s, background .15s;
+  }
+  .btn:hover{border-color:var(--brass-dim)}
+  .btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .btn.primary{border-color:var(--brass-dim); color:var(--brass)}
+  .btn.primary:hover{background:#1c2429}
+  .btn:disabled{opacity:.4; cursor:not-allowed}
+
+  /* Header: engraved title strip */
+  header.strip{
+    display:flex; align-items:center; gap:22px; flex-wrap:wrap;
+    padding:14px var(--pad); border-bottom:1px solid var(--rule);
+    background:linear-gradient(180deg,#12171a,#0d1215);
+  }
+  .brand{display:flex; flex-direction:column; gap:2px; margin-right:auto}
+  .brand h1{
+    margin:0; font-size:22px; letter-spacing:.34em; font-weight:700;
+    color:var(--ink); text-transform:uppercase;
+  }
+  .brand h1::before{content:"\2693\00a0\00a0"; color:var(--brass); letter-spacing:0}
+
+  /* Port lamps: the signature element */
+  .lamps{display:flex; gap:18px}
+  .lamp{
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border:1px solid var(--rule); border-radius:var(--radius); background:var(--panel-2);
+  }
+  .porthole{
+    width:20px; height:20px; border-radius:50%;
+    background:var(--lamp-off);
+    border:2px solid var(--brass-dim);
+    box-shadow:inset 0 0 4px rgba(0,0,0,.8);
+    transition:background .3s, box-shadow .3s;
+    flex:none;
+  }
+  .lamp[data-state="on"] .porthole{
+    background:var(--verdigris);
+    box-shadow:0 0 10px var(--verdigris), inset 0 0 3px rgba(0,0,0,.4);
+  }
+  .lamp[data-state="err"] .porthole{
+    background:var(--alert);
+    box-shadow:0 0 10px var(--alert), inset 0 0 3px rgba(0,0,0,.4);
+  }
+  .lamp .llabel{display:flex; flex-direction:column; line-height:1.15}
+  .lamp .llabel .t{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--brass)}
+  .lamp .llabel .s{font-size:12px; color:var(--muted)}
+
+  .tools{display:flex; gap:8px; align-items:center}
+
+  /* Layout */
+  main{
+    flex:1; display:grid; gap:14px; padding:14px var(--pad);
+    grid-template-columns:minmax(0,1.65fr) minmax(260px,1fr);
+    grid-template-rows:auto auto;
+    grid-template-areas:"term bench" "scope scope";
+    align-content:start;
+  }
+  @media (max-width:900px){
+    main{grid-template-columns:1fr; grid-template-areas:"term" "bench" "scope"}
+  }
+  .card{
+    background:var(--panel); border:1px solid var(--rule); border-radius:var(--radius);
+    display:flex; flex-direction:column; min-width:0;
+  }
+  .card > .head{
+    display:flex; align-items:center; gap:12px; padding:10px 14px;
+    border-bottom:1px solid var(--rule);
+  }
+  .card > .head h2{margin:0; font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--brass); font-weight:600}
+  .card > .head .right{margin-left:auto; display:flex; gap:8px; align-items:center}
+  .collapse{background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:2px 6px}
+  .collapse:hover{color:var(--brass)}
+  .card.collapsed > .body{display:none}
+
+  #card-term{grid-area:term}
+  #card-bench{grid-area:bench}
+  #card-scope{grid-area:scope}
+
+  /* Terminal: lit CRT in a brass bezel */
+  .crt-bezel{
+    margin:14px; padding:10px; border-radius:5px;
+    background:linear-gradient(160deg,#241c0e,#120d05);
+    border:1px solid var(--brass-dim);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.6);
+  }
+  .crt{
+    position:relative; background:var(--crt-bg); border-radius:3px; overflow:hidden;
+    box-shadow:inset 0 0 40px rgba(0,0,0,.9);
+  }
+  .crt canvas{display:block; width:100%; height:auto; image-rendering:pixelated}
+  .crt.scan::after{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 3px);
+    mix-blend-mode:multiply;
+  }
+  .crt:focus-within{outline:2px solid var(--focus); outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){ .crt.scan::after{display:none} }
+
+  .term-hint{padding:0 24px 16px; color:var(--muted); font-size:13px}
+  .role-warn{
+    margin:0 24px 14px; padding:9px 12px; border-radius:var(--radius); font-size:13px;
+    border:1px solid var(--alert); background:rgba(207,91,91,.08); color:var(--ink);
+  }
+  .pin-panel{padding:0 24px 18px; display:none; grid-template-columns:repeat(8,1fr); gap:6px}
+  .pin-panel.on{display:grid}
+  .pin-panel .pmode{
+    grid-column:1 / -1; font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--brass); margin-bottom:2px;
+  }
+  .pin-chip{
+    border:1px solid var(--rule); border-radius:2px; background:var(--panel-2);
+    padding:6px 2px; text-align:center; font-family:var(--mono);
+  }
+  .pin-chip .io{font-size:10px; color:var(--muted)}
+  .pin-chip .role{font-size:12px; color:var(--muted); margin-top:2px; min-height:15px}
+  .pin-chip.active{border-color:var(--verdigris)}
+  .pin-chip.active .role{color:var(--verdigris); font-weight:700}
+
+  /* Bench */
+  .bench-body{padding:14px; display:flex; flex-direction:column; gap:10px}
+  .macro-row{display:flex; gap:8px; flex-wrap:wrap}
+  .macro-note{font-size:12px; color:var(--muted); line-height:1.4}
+  .cmd-line{display:flex; gap:8px}
+  .cmd-line input{
+    flex:1; min-width:0; background:var(--crt-bg); color:var(--crt-fg);
+    border:1px solid var(--rule); border-radius:var(--radius); padding:8px 10px;
+    font-family:var(--mono); font-size:13px;
+  }
+  .cmd-line input:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .readout{
+    background:var(--crt-bg); color:var(--ink); border:1px solid var(--rule);
+    border-radius:var(--radius); padding:10px; font-family:var(--mono); font-size:12px;
+    white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto; min-height:44px;
+  }
+  .i2c-grid{
+    display:none; grid-template-columns:repeat(16, 1fr); gap:3px;
+    font-family:var(--mono); font-size:11px;
+  }
+  .i2c-cell{
+    text-align:center; padding:4px 0; border:1px solid var(--rule); border-radius:2px;
+    color:var(--muted); background:var(--panel-2);
+  }
+  .i2c-cell.on{
+    color:var(--crt-bg); background:var(--verdigris); border-color:var(--verdigris);
+    font-weight:700;
+  }
+
+  /* Analyzer */
+  .scope-body{padding:14px; display:flex; flex-direction:column; gap:12px}
+  .scope-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap}
+  .scope-instr{flex:1; min-width:240px; font-size:13px; color:var(--muted); line-height:1.5}
+  .scope-instr b{color:var(--ink); font-weight:600}
+  .scope-instr code{
+    background:var(--panel-2); border:1px solid var(--rule); border-radius:2px;
+    padding:1px 5px; font-family:var(--mono); font-size:12px; color:var(--brass);
+  }
+  .scope-id{font-family:var(--mono); font-size:12px; color:var(--verdigris)}
+  .scope-side{display:flex; flex-direction:column; gap:8px; min-width:200px}
+  .scope-meta{font-family:var(--mono); font-size:12px; color:var(--brass)}
+  .scope-status{font-family:var(--mono); font-size:12px; color:var(--muted); min-height:16px}
+  .scope-auto{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink); cursor:pointer}
+  .scope-auto input{accent-color:var(--verdigris)}
+  .scope-canvas-wrap{border:1px solid var(--rule); border-radius:var(--radius); background:var(--crt-bg); overflow:hidden}
+  .scope-canvas-wrap canvas{display:block; width:100%; height:auto}
+
+  /* Footer */
+  footer{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:10px var(--pad); border-top:1px solid var(--rule);
+    background:var(--panel-2); font-size:12px; color:var(--muted);
+  }
+  footer .ver{font-family:var(--mono); color:var(--brass); letter-spacing:.08em}
+  footer .sp{margin-left:auto}
+  footer button.link{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px; text-decoration:underline dotted}
+  footer button.link:hover{color:var(--brass)}
+
+  /* Banner + modal */
+  .banner{
+    margin:14px var(--pad) 0; padding:12px 14px; border-radius:var(--radius);
+    border:1px solid var(--alert); background:rgba(207,91,91,.08); color:var(--ink); font-size:13px;
+  }
+  .banner b{color:var(--alert)}
+  .modal-back{
+    position:fixed; inset:0; background:rgba(0,0,0,.66); display:none;
+    align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .modal-back.open{display:flex}
+  .modal{
+    background:var(--panel); border:1px solid var(--brass-dim); border-radius:var(--radius);
+    max-width:600px; width:100%; max-height:80vh; overflow:auto; padding:20px;
+  }
+  .modal h3{margin:0 0 10px; color:var(--brass); letter-spacing:.1em; text-transform:uppercase; font-size:14px}
+  .modal pre{white-space:pre-wrap; font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.5}
+  .modal .close{margin-top:14px}
+
+  #test-report{padding:24px var(--pad); font-family:var(--mono); font-size:13px}
+  #test-report .pass{color:var(--verdigris)}
+  #test-report .fail{color:var(--alert)}
+</style>
+</head>
+<body>
+
+<header class="strip">
+  <div class="brand">
+    <span class="eyebrow">Bus Pirate 5 Console</span>
+    <h1>Binnacle</h1>
+  </div>
+
+  <div class="lamps" aria-label="Port status">
+    <div class="lamp" id="lamp-a" data-state="off">
+      <span class="porthole"></span>
+      <span class="llabel"><span class="t">Terminal</span><span class="s" id="lamp-a-s">Offline</span></span>
+    </div>
+    <div class="lamp" id="lamp-b" data-state="off">
+      <span class="porthole"></span>
+      <span class="llabel"><span class="t">Analyzer</span><span class="s" id="lamp-b-s">Offline</span></span>
+    </div>
+  </div>
+
+  <div class="tools">
+    <button class="btn primary" id="auto-pair" title="Connect and assign both ports automatically">Auto-pair ports</button>
+    <button class="btn" id="theme-btn" title="Toggle high contrast">Contrast</button>
+    <button class="btn" id="mute-btn" title="Toggle sounds">Sound on</button>
+  </div>
+</header>
+
+<div id="app">
+  <div id="no-serial" class="banner" style="display:none">
+    <b>Web Serial not available.</b> Open this console in Chrome, Edge, or Opera on desktop,
+    served over HTTPS or from localhost. It cannot reach hardware inside a preview frame.
+  </div>
+
+  <main>
+    <!-- Terminal -->
+    <section class="card" id="card-term">
+      <div class="head">
+        <h2>Terminal</h2>
+        <div class="right">
+          <button class="btn primary" id="conn-a">Connect terminal</button>
+          <button class="btn" id="disc-a" disabled>Disconnect</button>
+          <button class="collapse" data-target="card-term" title="Collapse">-</button>
+        </div>
+      </div>
+      <div class="body">
+        <div class="crt-bezel">
+          <div class="crt scan" id="crt" tabindex="0" role="textbox" aria-label="Bus Pirate terminal">
+            <canvas id="term-canvas"></canvas>
+          </div>
+        </div>
+        <p class="term-hint" id="term-hint">
+          Connect the terminal port, then choose VT100 color mode on the Bus Pirate when prompted.
+          Type here once the link is live.
+        </p>
+        <div class="role-warn" id="term-warn" style="display:none"></div>
+        <div class="pin-panel" id="pin-panel" aria-label="Pin map"></div>
+      </div>
+    </section>
+
+    <!-- Protocol bench -->
+    <section class="card" id="card-bench">
+      <div class="head">
+        <h2>Protocol bench</h2>
+        <div class="right">
+          <button class="collapse" data-target="card-bench" title="Collapse">-</button>
+        </div>
+      </div>
+      <div class="body bench-body">
+        <div class="macro-row">
+          <button class="btn" data-macro="info" disabled>Device info</button>
+          <button class="btn" data-macro="i2cscan" disabled>Scan I2C bus</button>
+          <button class="btn" data-macro="spijedec" disabled>SPI JEDEC id</button>
+          <button class="btn" data-macro="uartbridge" disabled>UART bridge</button>
+        </div>
+        <div class="i2c-grid" id="i2c-grid" aria-label="I2C address map"></div>
+        <div class="cmd-line">
+          <input id="spi-input" placeholder="SPI transaction, e.g. 0x03 0x00 0x00 0x00 r:16" disabled autocomplete="off" spellcheck="false">
+          <button class="btn" id="spi-send" disabled>Run SPI</button>
+        </div>
+        <div class="cmd-line">
+          <input id="cmd-input" placeholder="Send a raw command (needs terminal link)" disabled autocomplete="off" spellcheck="false">
+          <button class="btn" id="cmd-send" disabled>Send</button>
+        </div>
+        <div class="readout" id="bench-out">Bench output appears here.</div>
+        <p class="macro-note">
+          Macros enter the bus mode (accepting menu defaults), run the command, and parse the reply.
+          The I2C map lights the 7-bit addresses that answered. SPI wraps your transaction in [ ] and
+          lists the returned bytes. Replies are scraped from text, so treat results as a convenience
+          over the command line, not a replacement for it.
+        </p>
+      </div>
+    </section>
+
+    <!-- Analyzer -->
+    <section class="card" id="card-scope">
+      <div class="head">
+        <h2>Logic analyzer</h2>
+        <div class="right">
+          <button class="btn primary" id="conn-b">Connect analyzer</button>
+          <button class="btn" id="disc-b" disabled>Disconnect</button>
+          <button class="collapse" data-target="card-scope" title="Collapse">-</button>
+        </div>
+      </div>
+      <div class="body scope-body">
+        <div class="scope-row">
+          <div class="scope-instr">
+            On the Bus Pirate terminal, type <code>binmode</code> and choose
+            <b>Follow along logic analyzer</b>, then connect the analyzer port here. Run any bus
+            transaction in the terminal and BINNACLE captures and draws it automatically. Bit 0 of each
+            sample is IO0, bit 7 is IO7. Samples arrive newest first and are shown oldest to newest.
+          </div>
+          <div class="scope-side">
+            <div class="scope-id" id="scope-id">No analyzer link.</div>
+            <div class="scope-meta" id="scope-meta"></div>
+            <label class="scope-auto"><input type="checkbox" id="scope-auto" checked> Auto-follow transactions</label>
+            <button class="btn" id="scope-capture" disabled>Capture now</button>
+            <div class="macro-row">
+              <button class="btn" id="scope-vcd" disabled>Export VCD</button>
+              <button class="btn" id="scope-csv" disabled>Export CSV</button>
+            </div>
+            <div class="scope-status" id="scope-status"></div>
+          </div>
+        </div>
+        <div class="scope-canvas-wrap">
+          <canvas id="scope-canvas"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="test-report" style="display:none"></div>
+
+<footer>
+  <span class="ver" id="ver">v0.1.0</span>
+  <span class="muted">BINNACLE, a Green Shoe Garage field instrument.</span>
+  <button class="link" id="about-btn">About / License</button>
+  <button class="link" id="feedback-btn">Feedback</button>
+  <span class="sp"></span>
+  <span class="muted" id="debug-tag" style="display:none">debug on</span>
+</footer>
+
+<div class="modal-back" id="modal-back">
+  <div class="modal">
+    <h3 id="modal-title">About</h3>
+    <div id="modal-body"></div>
+    <button class="btn close" id="modal-close">Close</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ===========================================================================
+   BINNACLE v0.1.0  -  Bus Pirate 5 browser console
+   Single file, no build, no runtime dependencies. Web Serial (Chromium).
+   Sections: CONFIG, util, SerialLink, AnsiTerminal, ProtocolBench, Analyzer,
+             Console (app shell), self-test.
+   =========================================================================== */
+
+/* ---- CONFIG --------------------------------------------------------------- */
+const VERSION = "1.0.0";
+const FEEDBACK_EMAIL = "feedback@greenshoegarage.com"; // TODO: set your address
+const BP5_USB = { usbVendorId: 0x1209 }; // hint filter; BP5 firmware USB VID. Selection stays open.
+const COLS = 80, ROWS = 34;             // terminal grid (statusbar lives near the bottom)
+const FONT_PX = 13;                     // base cell font size
+const PROMPT_RE = /(?:^|\n)\s*(HiZ|1WIRE|UART|HDUART|I2C|SPI|2WIRE|3WIRE|DIO|LED|INFRARED|JTAG)[^>\n]*>\s*$/;
+
+const params = new URLSearchParams(location.search);
+const DEBUG = params.has("debug");
+const TEST  = params.has("test");
+const log = (...a)=>{ if(DEBUG) console.log("[binnacle]", ...a); };
+
+/* ---- util ----------------------------------------------------------------- */
+const $ = (id)=>document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v=localStorage.getItem("binnacle."+k); return v===null?d:JSON.parse(v);}catch(_){return d;} },
+  set(k, v){ try{ localStorage.setItem("binnacle."+k, JSON.stringify(v)); }catch(_){} }
+};
+const stripAnsi = (s)=> s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b[()][A-Za-z0-9]/g,"");
+let audioCtx=null;
+function beep(freq, ms){
+  if(store.get("muted", false)) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.frequency.value=freq; o.type="sine"; g.gain.value=0.03;
+    o.connect(g); g.connect(audioCtx.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + ms/1000);
+    o.stop(audioCtx.currentTime + ms/1000);
+  }catch(_){}
+}
+
+/* ---- SerialLink: one Web Serial port with a read loop ---------------------
+   Text mode feeds string chunks to subscribers (terminal + bench scraper).
+   Bytes mode exposes a raw reader for the binmode analyzer.               --- */
+class SerialLink {
+  constructor(name){ this.name=name; this.port=null; this.reader=null; this.writer=null;
+    this.open=false; this.subs=new Set(); this.onstate=()=>{}; this.mode="text"; }
+  subscribe(fn){ this.subs.add(fn); return ()=>this.subs.delete(fn); }
+  emit(s){ for(const fn of this.subs){ try{ fn(s); }catch(e){ log("sub err",e); } } }
+  async request(){
+    let port;
+    try{ port = await navigator.serial.requestPort({ filters:[BP5_USB] }); }
+    catch(_){ try{ port = await navigator.serial.requestPort(); }catch(e){ return null; } }
+    return port;
+  }
+  async connect(mode){
+    this.mode = mode || "text";
+    const port = await this.request();
+    if(!port) return false;
+    this.port = port;
+    await port.open({ baudRate:115200, dataBits:8, stopBits:1, parity:"none", flowControl:"none" });
+    this.open = true;
+    this.writer = port.writable.getWriter();
+    this.onstate("on");
+    this._readLoop();
+    beep(660, 90);
+    log(this.name, "connected");
+    return true;
+  }
+  async _readLoop(){
+    const dec = new TextDecoder();
+    try{
+      while(this.port && this.port.readable && this.open){
+        this.reader = this.port.readable.getReader();
+        try{
+          while(true){
+            const { value, done } = await this.reader.read();
+            if(done) break;
+            if(!value) continue;
+            if(this.mode==="text") this.emit(dec.decode(value, {stream:true}));
+            else this.emit(value); // Uint8Array to byte subscribers
+          }
+        }catch(e){ log(this.name,"read err",e); }
+        finally{ try{ this.reader.releaseLock(); }catch(_){} this.reader=null; }
+        if(!this.open) break;
+      }
+    }catch(e){ log(this.name,"loop err",e); this.onstate("err"); }
+  }
+  async write(data){
+    if(!this.writer) return;
+    const bytes = (typeof data==="string") ? new TextEncoder().encode(data) : data;
+    await this.writer.write(bytes);
+  }
+  async disconnect(){
+    this.open=false;
+    try{ if(this.reader) await this.reader.cancel(); }catch(_){}
+    try{ if(this.writer){ this.writer.releaseLock(); this.writer=null; } }catch(_){}
+    try{ if(this.port) await this.port.close(); }catch(_){}
+    this.port=null; this.onstate("off");
+    beep(330,90); log(this.name,"disconnected");
+  }
+}
+
+/* ---- AnsiTerminal: subset VT100 emulator rendered to canvas ---------------
+   Handles printable text, CR/LF/BS/TAB, SGR colors, cursor movement,
+   erase line/display, scroll region, save/restore cursor, cursor show/hide.
+   Enough that the BP5 VT100 statusbar renders instead of leaking escapes. -- */
+const ANSI_COLORS = [
+  "#0b0d0e","#cf5b5b","#7ec98f","#e6be6a","#6ea6d6","#b487c9","#5bbfb2","#c7cec9",
+  "#3a4247","#e07a7a","#9fe0ab","#f0d089","#8fc0e6","#cfa6df","#7fd6cb","#eef2ee"
+];
+class AnsiTerminal {
+  constructor(canvas, opts){
+    this.canvas=canvas; this.ctx=canvas.getContext("2d");
+    this.cols=opts.cols; this.rows=opts.rows;
+    this.defFg=3; this.defBg=-1; // brass-ish default fg, transparent bg
+    this.reset();
+    this._measure();
+    this._dirty=true; this._focused=false; this._blink=true;
+    setInterval(()=>{ this._blink=!this._blink; this._dirty=true; }, 500);
+    const loop=()=>{ if(this._dirty){ this._render(); this._dirty=false; } requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+  reset(){
+    this.grid=[]; for(let y=0;y<this.rows;y++) this.grid.push(this._blankRow());
+    this.cx=0; this.cy=0; this.fg=this.defFg; this.bg=this.defBg; this.bold=false; this.inv=false;
+    this.top=0; this.bottom=this.rows-1; this.state="normal"; this.parm=""; this.priv=false;
+    this.saved=null; this.cursorVis=true;
+  }
+  _blankRow(){ const r=[]; for(let x=0;x<this.cols;x++) r.push({ch:" ",fg:this.defFg,bg:this.defBg,bold:false,inv:false}); return r; }
+  _measure(){
+    const dpr=window.devicePixelRatio||1;
+    this.ctx.font = FONT_PX+"px "+getComputedStyle(document.body).getPropertyValue("--mono");
+    const m=this.ctx.measureText("M");
+    this.cw=Math.ceil(m.width); this.ch=Math.ceil(FONT_PX*1.5);
+    this.canvas.width=this.cols*this.cw*dpr; this.canvas.height=this.rows*this.ch*dpr;
+    this.canvas.style.aspectRatio=(this.cols*this.cw)+" / "+(this.rows*this.ch);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.dpr=dpr;
+  }
+  setFocused(f){ this._focused=f; this._dirty=true; }
+  _render(){
+    const c=this.ctx;
+    c.fillStyle=getComputedStyle(document.body).getPropertyValue("--crt-bg").trim()||"#080a0b";
+    c.fillRect(0,0,this.cols*this.cw,this.rows*this.ch);
+    c.font=FONT_PX+"px "+getComputedStyle(document.body).getPropertyValue("--mono");
+    c.textBaseline="top";
+    for(let y=0;y<this.rows;y++){
+      for(let x=0;x<this.cols;x++){
+        const cell=this.grid[y][x];
+        let fg=cell.fg, bg=cell.bg;
+        if(cell.inv){ const t=fg; fg=(bg<0?0:bg); bg=(t<0?7:t); }
+        if(bg>=0){ c.fillStyle=ANSI_COLORS[bg]||"#000"; c.fillRect(x*this.cw,y*this.ch,this.cw,this.ch); }
+        if(cell.ch!==" "){
+          c.fillStyle = fg<0 ? (getComputedStyle(document.body).getPropertyValue("--crt-fg").trim()||"#e6be6a") : (ANSI_COLORS[fg]||"#e6be6a");
+          if(cell.bold) c.font="bold "+FONT_PX+"px "+getComputedStyle(document.body).getPropertyValue("--mono");
+          c.fillText(cell.ch, x*this.cw, y*this.ch+2);
+          if(cell.bold) c.font=FONT_PX+"px "+getComputedStyle(document.body).getPropertyValue("--mono");
+        }
+      }
+    }
+    if(this.cursorVis && this._focused && this._blink){
+      c.fillStyle=getComputedStyle(document.body).getPropertyValue("--crt-fg").trim()||"#e6be6a";
+      c.globalAlpha=0.75; c.fillRect(this.cx*this.cw, this.cy*this.ch, this.cw, this.ch); c.globalAlpha=1;
+    }
+  }
+  feed(str){
+    for(let i=0;i<str.length;i++) this._byte(str.charCodeAt(i), str[i]);
+    this._dirty=true;
+  }
+  _byte(code, chr){
+    if(this.state==="esc"){ this._esc(chr); return; }
+    if(this.state==="csi"){ this._csi(code, chr); return; }
+    switch(code){
+      case 0x1b: this.state="esc"; return;
+      case 0x0d: this.cx=0; return;                 // CR
+      case 0x0a: this._lf(); return;                // LF
+      case 0x08: if(this.cx>0)this.cx--; return;    // BS
+      case 0x09: this.cx=Math.min(this.cols-1,(Math.floor(this.cx/8)+1)*8); return; // TAB
+      case 0x07: return;                             // BEL
+      default:
+        if(code<0x20) return;
+        this._put(chr); return;
+    }
+  }
+  _esc(chr){
+    if(chr==="["){ this.state="csi"; this.parm=""; this.priv=false; return; }
+    if(chr==="7"){ this._save(); this.state="normal"; return; }
+    if(chr==="8"){ this._restore(); this.state="normal"; return; }
+    if(chr==="("||chr===")"){ this.state="charset"; return; } // consume next
+    if(this.state==="charset"){ this.state="normal"; return; }
+    this.state="normal";
+  }
+  _csi(code, chr){
+    if((code>=0x30&&code<=0x3f)){ if(chr==="?"){this.priv=true;return;} this.parm+=chr; return; }
+    const ps=this.parm.split(";").map(s=>s===""?null:parseInt(s,10));
+    const p=(i,d)=>{ const v=ps[i]; return (v===null||v===undefined||isNaN(v))?d:v; };
+    switch(chr){
+      case "m": this._sgr(ps); break;
+      case "H": case "f": this.cy=this._clampY(p(0,1)-1); this.cx=this._clampX(p(1,1)-1); break;
+      case "A": this.cy=this._clampY(this.cy-p(0,1)); break;
+      case "B": this.cy=this._clampY(this.cy+p(0,1)); break;
+      case "C": this.cx=this._clampX(this.cx+p(0,1)); break;
+      case "D": this.cx=this._clampX(this.cx-p(0,1)); break;
+      case "G": this.cx=this._clampX(p(0,1)-1); break;             // CHA
+      case "d": this.cy=this._clampY(p(0,1)-1); break;             // VPA
+      case "J": this._ed(p(0,0)); break;
+      case "K": this._el(p(0,0)); break;
+      case "r": this.top=this._clampY(p(0,1)-1); this.bottom=this._clampY(p(1,this.rows)-1); this.cx=0; this.cy=this.top; break;
+      case "s": this._save(); break;
+      case "u": this._restore(); break;
+      case "h": if(this.priv && this.parm==="25") this.cursorVis=true; break;
+      case "l": if(this.priv && this.parm==="25") this.cursorVis=false; break;
+      default: break;
+    }
+    this.state="normal"; this.parm=""; this.priv=false;
+  }
+  _sgr(ps){
+    if(ps.length===0||(ps.length===1&&ps[0]===null)) ps=[0];
+    for(let i=0;i<ps.length;i++){
+      const n=ps[i]===null?0:ps[i];
+      if(n===0){ this.fg=this.defFg; this.bg=this.defBg; this.bold=false; this.inv=false; }
+      else if(n===1) this.bold=true;
+      else if(n===7) this.inv=true;
+      else if(n===22) this.bold=false;
+      else if(n===27) this.inv=false;
+      else if(n>=30&&n<=37) this.fg=n-30;
+      else if(n===39) this.fg=this.defFg;
+      else if(n>=40&&n<=47) this.bg=n-40;
+      else if(n===49) this.bg=this.defBg;
+      else if(n>=90&&n<=97) this.fg=n-90+8;
+      else if(n>=100&&n<=107) this.bg=n-100+8;
+    }
+  }
+  _put(chr){
+    if(this.cx>=this.cols){ this.cx=0; this._lf(); }
+    this.grid[this.cy][this.cx]={ch:chr,fg:this.fg,bg:this.bg,bold:this.bold,inv:this.inv};
+    this.cx++;
+  }
+  _lf(){
+    if(this.cy===this.bottom) this._scroll();
+    else this.cy=Math.min(this.rows-1,this.cy+1);
+  }
+  _scroll(){
+    this.grid.splice(this.top,1);
+    this.grid.splice(this.bottom,0,this._blankRow());
+  }
+  _ed(n){
+    if(n===2||n===3){ for(let y=0;y<this.rows;y++) this.grid[y]=this._blankRow(); this.cx=0; this.cy=0; return; }
+    if(n===0){ this._elFrom(this.cx); for(let y=this.cy+1;y<this.rows;y++) this.grid[y]=this._blankRow(); }
+    else if(n===1){ this._elTo(this.cx); for(let y=0;y<this.cy;y++) this.grid[y]=this._blankRow(); }
+  }
+  _el(n){
+    if(n===0) this._elFrom(this.cx);
+    else if(n===1) this._elTo(this.cx);
+    else { this.grid[this.cy]=this._blankRow(); }
+  }
+  _elFrom(x){ for(let i=x;i<this.cols;i++) this.grid[this.cy][i]={ch:" ",fg:this.defFg,bg:this.defBg,bold:false,inv:false}; }
+  _elTo(x){ for(let i=0;i<=x&&i<this.cols;i++) this.grid[this.cy][i]={ch:" ",fg:this.defFg,bg:this.defBg,bold:false,inv:false}; }
+  _save(){ this.saved={cx:this.cx,cy:this.cy,fg:this.fg,bg:this.bg,bold:this.bold,inv:this.inv}; }
+  _restore(){ if(this.saved){ Object.assign(this,{cx:this.saved.cx,cy:this.saved.cy,fg:this.saved.fg,bg:this.saved.bg,bold:this.saved.bold,inv:this.saved.inv}); } }
+  _clampX(x){ return Math.max(0,Math.min(this.cols-1,x)); }
+  _clampY(y){ return Math.max(0,Math.min(this.rows-1,y)); }
+  // plain text of the grid, for tests
+  text(){ return this.grid.map(r=>r.map(c=>c.ch).join("").replace(/\s+$/,"")).join("\n"); }
+}
+
+/* ---- pure parse and export helpers (unit tested) -------------------------- */
+// Per-mode pin roles, taken from BusPirate5-firmware/src/pirate.h. Keys are the
+// mode names as they appear in the prompt (uppercased). Values map IO index to
+// the pin label the firmware assigns in that mode.
+const PIN_MAP = {
+  HIZ:     {},
+  "1WIRE": {0:"OWD"},
+  UART:    {4:"TX", 5:"RX", 6:"CTS", 7:"RTS"},
+  HDUART:  {0:"RXTX"},
+  I2C:     {0:"SDA", 1:"SCL"},
+  SPI:     {4:"MISO", 5:"CS", 6:"CLK", 7:"MOSI"},
+  "2WIRE": {0:"SDA", 1:"SCL", 2:"RST"},
+  "3WIRE": {4:"MISO", 5:"CS", 6:"SCLK", 7:"MOSI"},
+  LED:     {0:"SDO", 1:"SCL"},
+  DIO:     {0:"D0",1:"D1",2:"D2",3:"D3",4:"D4",5:"D5",6:"D6",7:"D7"},
+  INFRARED:{}, JTAG:{}
+};
+// Classify what a serial port sounds like from a sample of its output.
+function classifyPortText(raw){
+  if(/\x1b\[/.test(raw)) return "terminal";       // VT100 control sequences
+  if(PROMPT_RE.test(stripAnsi(raw))) return "terminal";
+  if(/\$FALADATA/.test(raw)) return "binmode";
+  return (raw && raw.length) ? "unknown" : "binmode";
+}
+// Decide which role a freshly probed port should take, given which roles are open.
+// When both roles are free, only a clear "terminal" reading takes the terminal slot.
+function decideRole(probeRole, needTerm, needScope){
+  if(needTerm && needScope) return probeRole==="terminal" ? "terminal" : "analyzer";
+  if(needTerm) return "terminal";
+  if(needScope) return "analyzer";
+  return null;
+}
+
+// Parse the Bus Pirate I2C scan output. Firmware prints one line per responder:
+//   0xNN (0xWW W) (0xRR R) <optional device name>
+// where 0xNN is the 7-bit address. Returns [{addr, name}], deduplicated.
+function parseI2CScan(text){
+  const out=[], seen=new Set();
+  const re=/0x([0-9A-Fa-f]{2})\s*\(0x[0-9A-Fa-f]{2}\s*W\)([^\r\n]*)/g;
+  let m;
+  while((m=re.exec(text))){
+    const addr=parseInt(m[1],16);
+    if(seen.has(addr)) continue; seen.add(addr);
+    const name=(m[2]||"").replace(/\(0x[0-9A-Fa-f]{2}\s*R\)/,"").trim();
+    out.push({addr, name});
+  }
+  return out;
+}
+// Extract 0xNN byte tokens from a device reply, in order.
+function parseHexBytes(text){
+  return (text.match(/0x[0-9A-Fa-f]{2}/g)||[]).map(h=>parseInt(h,16));
+}
+// Change-only VCD for the last FALA capture. Timescale in picoseconds.
+function genVCD(samples, ch, speed){
+  const ids=[]; for(let b=0;b<ch;b++) ids.push(String.fromCharCode(33+b));
+  const psPer = speed ? Math.max(1, Math.round(1e12/speed)) : 1000;
+  let out="";
+  out+="$version BINNACLE v"+VERSION+" $end\n";
+  out+="$timescale 1 ps $end\n$scope module buspirate $end\n";
+  for(let b=0;b<ch;b++) out+="$var wire 1 "+ids[b]+" IO"+b+" $end\n";
+  out+="$upscope $end\n$enddefinitions $end\n#0\n$dumpvars\n";
+  const prev=new Array(ch);
+  for(let b=0;b<ch;b++){ const v=(samples[0]>>b)&1; prev[b]=v; out+=v+ids[b]+"\n"; }
+  out+="$end\n";
+  for(let i=1;i<samples.length;i++){
+    let ch2="";
+    for(let b=0;b<ch;b++){ const v=(samples[i]>>b)&1; if(v!==prev[b]){ ch2+=v+ids[b]+"\n"; prev[b]=v; } }
+    if(ch2) out+="#"+(i*psPer)+"\n"+ch2;
+  }
+  out+="#"+(samples.length*psPer)+"\n";
+  return out;
+}
+// One row per sample: time_s, then each channel bit.
+function genCSV(samples, ch, speed){
+  let head="time_s"; for(let b=0;b<ch;b++) head+=",IO"+b;
+  const rows=[head];
+  for(let i=0;i<samples.length;i++){
+    const t=speed ? (i/speed) : i;
+    let row=(speed? t.toExponential(6) : String(i));
+    for(let b=0;b<ch;b++) row+=","+((samples[i]>>b)&1);
+    rows.push(row);
+  }
+  return rows.join("\n")+"\n";
+}
+function downloadText(name, text, mime){
+  const blob=new Blob([text], {type:mime||"text/plain"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a);
+  a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+
+/* ---- ProtocolBench: command macros over the terminal link ----------------- */
+class ProtocolBench {
+  constructor(link, outEl, gridEl){ this.link=link; this.out=outEl; this.gridEl=gridEl; this.busy=false; }
+  print(s){ this.out.textContent = s; }
+  // Send a command, resolve when the mode prompt returns or the line goes quiet.
+  // Returns { clean, atMode }. atMode true means a mode/HiZ prompt was seen.
+  drive(cmd, quietMs, maxMs){
+    return new Promise((resolve)=>{
+      if(!this.link){ resolve({clean:"", atMode:false}); return; }
+      let buf="", last=Date.now(), started=false;
+      const unsub=this.link.subscribe((s)=>{ buf+=s; last=Date.now(); started=true; });
+      this.link.write(cmd + "\r");
+      const t0=Date.now();
+      const tick=()=>{
+        const clean=stripAnsi(buf);
+        if(PROMPT_RE.test(clean)){ unsub(); return resolve({clean, atMode:true}); }
+        if(started && Date.now()-last > (quietMs||220)){ unsub(); return resolve({clean, atMode:false}); }
+        if(Date.now()-t0 > (maxMs||3000)){ unsub(); return resolve({clean, atMode:false}); }
+        setTimeout(tick, 40);
+      }; tick();
+    });
+  }
+  _promptIs(clean, mode){ const m=clean.match(PROMPT_RE); return !!(m && m[1].toUpperCase()===mode.toUpperCase()); }
+  // Enter a bus mode, accepting each submenu default with Enter until the mode prompt shows.
+  async enterMode(mode){
+    let res=await this.drive("m "+mode, 260, 3500);
+    let guard=0;
+    while(!this._promptIs(res.clean, mode) && guard<10){
+      if(/>\s*$/.test(res.clean)) res=await this.drive("", 260, 3000); // accept default
+      else break;
+      guard++;
+    }
+    return res.clean;
+  }
+  async info(){
+    if(this.busy) return; this.busy=true;
+    this.print("Reading device info...");
+    const r=await this.drive("i", 300, 2000);
+    this.print(r.clean.trim()||"(no reply)"); this.busy=false;
+  }
+  async i2cScan(){
+    if(this.busy) return; this.busy=true;
+    this.print("Entering I2C and scanning...");
+    await this.enterMode("i2c");
+    const r=await this.drive("scan", 400, 5000);
+    const found=parseI2CScan(r.clean);
+    this._renderGrid(found);
+    this.print(found.length
+      ? "Found "+found.length+" I2C device(s): "+found.map(f=>"0x"+f.addr.toString(16).padStart(2,"0")).join(", ")
+      : "No I2C devices answered. Check wiring, pull-ups, and mode prompts.");
+    this.busy=false;
+  }
+  async spiJedec(){
+    if(this.busy) return; this.busy=true;
+    this.print("Entering SPI and reading JEDEC id...");
+    await this.enterMode("spi");
+    const r=await this.drive("[0x9f r:3]", 350, 3000);
+    const bytes=parseHexBytes(r.clean);
+    // The first byte is usually the 0x9F command echo; the read bytes follow.
+    const read=bytes.slice(-3);
+    this.print(read.length
+      ? "JEDEC id (mfr, type, capacity): "+read.map(b=>"0x"+b.toString(16).padStart(2,"0")).join(" ")+"\n\nRaw:\n"+r.clean.trim()
+      : "No bytes parsed. Raw reply:\n"+r.clean.trim());
+    this.busy=false;
+  }
+  async spiTxn(txn){
+    if(this.busy) return; this.busy=true;
+    const cmd = /^\s*\[/.test(txn) ? txn : "["+txn+"]";
+    this.print("SPI: "+cmd);
+    await this.enterMode("spi");
+    const r=await this.drive(cmd, 350, 3000);
+    const bytes=parseHexBytes(r.clean);
+    this.print("Bytes: "+(bytes.length?bytes.map(b=>"0x"+b.toString(16).padStart(2,"0")).join(" "):"(none)")+"\n\nRaw:\n"+r.clean.trim());
+    this.busy=false;
+  }
+  async raw(cmd){
+    if(this.busy) return; this.busy=true;
+    this.print("Sending: "+cmd);
+    const r=await this.drive(cmd, 300, 2500);
+    this.print(r.clean.trim()||"(no reply)"); this.busy=false;
+  }
+  async uartBridge(){
+    if(this.busy) return; this.busy=true;
+    this.print("Entering UART and starting the transparent bridge...");
+    await this.enterMode("uart");
+    const r=await this.drive("(1)", 400, 3000);   // macro 1: transparent UART bridge
+    this.print("Bridge started. Traffic now passes through the terminal screen.\n"+
+               "The bridge can only be exited by pressing the physical button on the Bus Pirate.\n\n"+
+               r.clean.trim());
+    this.busy=false;
+  }
+  _renderGrid(found){
+    if(!this.gridEl) return;
+    const hit=new Set(found.map(f=>f.addr));
+    const names={}; found.forEach(f=>{ if(f.name) names[f.addr]=f.name; });
+    let html="";
+    for(let a=0;a<128;a++){
+      const on=hit.has(a);
+      const tip=names[a]?" title=\""+names[a].replace(/"/g,"")+"\"":"";
+      html+="<span class=\"i2c-cell"+(on?" on":"")+"\""+tip+">"+a.toString(16).padStart(2,"0")+"</span>";
+    }
+    this.gridEl.innerHTML=html;
+    this.gridEl.style.display="grid";
+  }
+}
+
+/* ---- formatting helpers --------------------------------------------------- */
+function fmtHz(hz){
+  if(!hz) return "? Hz";
+  if(hz>=1e6) return (hz/1e6).toFixed(hz%1e6?2:0)+" MHz";
+  if(hz>=1e3) return (hz/1e3).toFixed(hz%1e3?1:0)+" kHz";
+  return hz+" Hz";
+}
+function fmtDur(sec){
+  if(!isFinite(sec)||sec<=0) return "0 s";
+  if(sec<1e-6) return (sec*1e9).toFixed(0)+" ns";
+  if(sec<1e-3) return (sec*1e6).toFixed(1)+" us";
+  if(sec<1)    return (sec*1e3).toFixed(2)+" ms";
+  return sec.toFixed(3)+" s";
+}
+
+/* ---- Analyzer: FALA follow-along logic analyzer over the binmode port ------
+   Protocol (from BusPirate5-firmware/src/binmode/falaio.c):
+   - After each terminal bus transaction the device sends, on the second CDC port,
+     an ASCII line: "$FALADATA;{pins};{trigpins};{trigmask};{edge};{speedHz};{samples};{presamples};\n"
+   - Host sends '?' to re-request that metadata line.
+   - Host sends '+' to dump {samples} raw bytes, newest sample first, one byte per
+     sample. Bit N of each byte is the level of IO pin N. We reverse to chronological.
+   This class runs its own text/binary state machine over the raw byte stream.  -- */
+const PARSE_LIMIT = 200000; // guard against absurd sample counts
+class Analyzer {
+  constructor(link, canvas, els){
+    this.link=link; this.canvas=canvas;
+    this.idEl=els.id; this.metaEl=els.meta; this.statusEl=els.status; this.autoEl=els.auto;
+    this.channels=8; this._reset(); this._drawLanes(8);
+  }
+  _reset(){ this.acc=new Uint8Array(0); this.state="idle"; this.expected=0; this.dump=null; this.dumpLen=0; this.meta=null; this._warned=false; }
+  connectHooks(){ this.unsub=this.link.subscribe((u8)=>this.onData(u8)); this.probe(); }
+  disconnectHooks(){ if(this.unsub){ this.unsub(); this.unsub=null; } clearTimeout(this._to); this._reset();
+    this.idEl.textContent="No analyzer link."; this.metaEl.textContent=""; this.statusEl.textContent=""; this._drawLanes(8); }
+  probe(){ this.link.write(new Uint8Array([0x3f])); }   // '?'
+  request(){ this.link.write(new Uint8Array([0x2b])); } // '+'
+  _auto(){ return this.autoEl ? this.autoEl.checked : true; }
+
+  onData(u8){
+    const merged=new Uint8Array(this.acc.length+u8.length);
+    merged.set(this.acc,0); merged.set(u8,this.acc.length); this.acc=merged;
+    let go=true;
+    while(go){
+      go=false;
+      if(this.state==="idle"){
+        const nl=this.acc.indexOf(0x0a);
+        if(nl>=0){
+          const line=new TextDecoder().decode(this.acc.slice(0,nl)).replace(/\r$/,"");
+          this.acc=this.acc.slice(nl+1); go=true;
+          if(line.startsWith("$FALADATA;")) this._onMeta(line);
+          else if(!this._warned && classifyPortText(line)==="terminal"){
+            this._warned=true;
+            this.idEl.textContent="This looks like the terminal port, not the analyzer. Connect the other Bus Pirate port here.";
+          }
+        }
+      } else if(this.state==="dump"){
+        const need=this.expected-this.dumpLen;
+        if(need>0 && this.acc.length>0){
+          const take=Math.min(need,this.acc.length);
+          this.dump.set(this.acc.slice(0,take), this.dumpLen);
+          this.dumpLen+=take; this.acc=this.acc.slice(take); go=true;
+        }
+        if(this.dumpLen>=this.expected) this._onDumpComplete();
+      }
+    }
+  }
+  _onMeta(line){
+    const f=line.split(";");
+    const pins=parseInt(f[1],10)||8;
+    const speed=parseInt(f[5],10)||0;
+    const samples=parseInt(f[6],10)||0;
+    this.meta={pins,speed,samples}; this.channels=pins;
+    this.idEl.textContent="FALA link up.";
+    this.metaEl.textContent = samples>0
+      ? samples+" samples @ "+fmtHz(speed)+"  ("+fmtDur(speed?samples/speed:0)+")"
+      : "Idle. Run a bus transaction on the terminal.";
+    if(samples>0 && this._auto()) this._beginDump(samples);
+  }
+  captureNow(){
+    // Ask for fresh metadata; if we already hold a valid count, pull immediately.
+    this.probe();
+    if(this.meta && this.meta.samples>0 && this.state==="idle") this._beginDump(this.meta.samples);
+  }
+  _beginDump(n){
+    if(n<=0 || n>PARSE_LIMIT){ this.statusEl.textContent="Sample count out of range ("+n+")."; return; }
+    this.expected=n; this.dump=new Uint8Array(n); this.dumpLen=0; this.state="dump";
+    this.statusEl.textContent="Reading "+n+" samples...";
+    this.request();
+    clearTimeout(this._to);
+    this._to=setTimeout(()=>{ if(this.state==="dump"){ this.statusEl.textContent="Timed out at "+this.dumpLen+"/"+n+" samples."; this._reset(); } }, 2000 + n/30);
+  }
+  _onDumpComplete(){
+    clearTimeout(this._to);
+    const n=this.expected, speed=this.meta?this.meta.speed:0;
+    const s=this.dump.slice(0,n); s.reverse();  // newest-first to chronological
+    this.statusEl.textContent="";
+    this.state="idle"; this.dump=null; this.dumpLen=0; this.expected=0;
+    this.last={ samples:s, channels:this.channels, speed };  // retained for export
+    if(this.onCapture) this.onCapture();
+    this._render(s, this.channels, speed);
+    beep(720,70);
+  }
+  exportVCD(){
+    if(!this.last) return;
+    downloadText("binnacle-capture.vcd", genVCD(this.last.samples, this.last.channels, this.last.speed), "text/plain");
+  }
+  exportCSV(){
+    if(!this.last) return;
+    downloadText("binnacle-capture.csv", genCSV(this.last.samples, this.last.channels, this.last.speed), "text/csv");
+  }
+  _drawLanes(n){
+    const c=this.canvas.getContext("2d"); const dpr=window.devicePixelRatio||1;
+    const W=760, laneH=26, H=n*laneH+16; this.canvas.width=W*dpr; this.canvas.height=H*dpr;
+    this.canvas.style.aspectRatio=W+" / "+H; c.setTransform(dpr,0,0,dpr,0,0);
+    const cs=getComputedStyle(document.body);
+    c.fillStyle=cs.getPropertyValue("--crt-bg").trim()||"#080a0b"; c.fillRect(0,0,W,H);
+    c.strokeStyle=cs.getPropertyValue("--rule").trim()||"#29333a"; c.lineWidth=1;
+    c.fillStyle=cs.getPropertyValue("--muted").trim()||"#8a958f";
+    c.font="11px "+cs.getPropertyValue("--mono");
+    for(let i=0;i<n;i++){
+      const y=14+i*laneH; c.fillText("IO"+i, 6, y-4);
+      c.beginPath(); c.moveTo(40,y); c.lineTo(W-8,y); c.stroke();
+    }
+  }
+  _render(samples, ch, speed){
+    const n=samples.length; if(n===0){ this._drawLanes(ch); return; }
+    const c=this.canvas.getContext("2d"); const dpr=window.devicePixelRatio||1;
+    const W=760, laneH=26, padL=40, padR=8, H=ch*laneH+16, plotW=W-padL-padR;
+    this.canvas.width=W*dpr; this.canvas.height=H*dpr;
+    this.canvas.style.aspectRatio=W+" / "+H; c.setTransform(dpr,0,0,dpr,0,0);
+    const cs=getComputedStyle(document.body);
+    const bg=cs.getPropertyValue("--crt-bg").trim()||"#080a0b";
+    const rule=cs.getPropertyValue("--rule").trim()||"#29333a";
+    const muted=cs.getPropertyValue("--muted").trim()||"#8a958f";
+    const trace=cs.getPropertyValue("--verdigris").trim()||"#52a598";
+    c.fillStyle=bg; c.fillRect(0,0,W,H);
+    for(let b=0;b<ch;b++){
+      const top=6+b*laneH, hi=top+2, lo=top+laneH-8;
+      c.strokeStyle=rule; c.lineWidth=1;
+      c.beginPath(); c.moveTo(padL,lo); c.lineTo(W-padR,lo); c.stroke();       // baseline
+      c.fillStyle=muted; c.font="11px "+cs.getPropertyValue("--mono");
+      c.fillText("IO"+b, 6, lo);
+      // step trace, nearest-sample decimation across pixel columns
+      c.strokeStyle=trace; c.lineWidth=1.4; c.beginPath();
+      let prevY=null;
+      for(let x=0;x<=plotW;x++){
+        const i=Math.min(n-1, Math.floor(x*n/plotW));
+        const bit=(samples[i]>>b)&1;
+        const y=bit?hi:lo, px=padL+x;
+        if(prevY===null){ c.moveTo(px,y); }
+        else { c.lineTo(px,prevY); c.lineTo(px,y); }
+        prevY=y;
+      }
+      c.stroke();
+    }
+    // time axis label
+    c.fillStyle=muted; c.font="10px "+cs.getPropertyValue("--mono");
+    c.fillText("0", padL, H-2);
+    c.fillText(fmtDur(speed?n/speed:0), W-padR-46, H-2);
+  }
+}
+
+/* ---- Console: app shell --------------------------------------------------- */
+const App = {
+  linkA:new SerialLink("port-1"),
+  linkB:new SerialLink("port-2"),
+  term:null, bench:null, analyzer:null,
+  termLink:null, scopeLink:null, freeLinks:null,
+  init(){
+    $("ver").textContent="v"+VERSION;
+    if(DEBUG){ $("debug-tag").style.display="inline"; }
+    const theme=store.get("theme","night");
+    if(theme==="contrast") document.documentElement.setAttribute("data-theme","contrast");
+    $("mute-btn").textContent = store.get("muted",false) ? "Sound off" : "Sound on";
+
+    if(!("serial" in navigator)){ $("no-serial").style.display="block"; }
+
+    // terminal emulator
+    this.term=new AnsiTerminal($("term-canvas"), {cols:COLS, rows:ROWS});
+    this.term.feed("\x1b[33mBINNACLE v"+VERSION+"\x1b[0m  Bus Pirate 5 console.\r\n");
+    this.term.feed("Use Auto-pair, or connect the two ports by hand.\r\n");
+
+    // stable role handlers, attached to whichever link takes each role
+    this._termFeed=(s)=>this.term.feed(s);
+    this._termSniff=(s)=>this._sniffMode(s);
+    this.currentMode="HIZ"; this.renderPins("HIZ");
+    this.freeLinks=[this.linkA, this.linkB];
+
+    this.bench=new ProtocolBench(null, $("bench-out"), $("i2c-grid"));
+    this.analyzer=new Analyzer(null, $("scope-canvas"),
+      { id:$("scope-id"), meta:$("scope-meta"), status:$("scope-status"), auto:$("scope-auto") });
+
+    this.wire();
+    if(navigator.serial && navigator.serial.addEventListener){
+      navigator.serial.addEventListener("disconnect", (e)=>{
+        if(this.termLink && this.termLink.port===e.target){ this.setLamp("a","err"); this.disconnectTerminal(); }
+        if(this.scopeLink && this.scopeLink.port===e.target){ this.setLamp("b","err"); this.disconnectAnalyzer(); }
+      });
+    }
+  },
+  _takeFreeLink(){ return this.freeLinks.length ? this.freeLinks.shift() : null; },
+  _releaseLink(link){ if(link && this.freeLinks.indexOf(link)<0) this.freeLinks.push(link); },
+  wire(){
+    // terminal keyboard, routed to whichever link holds the terminal role
+    const crt=$("crt");
+    crt.addEventListener("focus", ()=>this.term.setFocused(true));
+    crt.addEventListener("blur",  ()=>this.term.setFocused(false));
+    crt.addEventListener("keydown",(e)=>{
+      if(!this.termLink || !this.termLink.open) return;
+      const b=this.keyToBytes(e);
+      if(b!==null){ e.preventDefault(); this.termLink.write(b); }
+    });
+    crt.addEventListener("paste",(e)=>{
+      if(!this.termLink || !this.termLink.open) return;
+      const t=(e.clipboardData||window.clipboardData).getData("text");
+      if(t){ e.preventDefault(); this.termLink.write(t); }
+    });
+
+    $("auto-pair").addEventListener("click", ()=>this.autoPair());
+    $("conn-a").addEventListener("click", ()=>this.manualConnectTerminal());
+    $("disc-a").addEventListener("click", ()=>this.disconnectTerminal());
+    $("conn-b").addEventListener("click", ()=>this.manualConnectAnalyzer());
+    $("disc-b").addEventListener("click", ()=>this.disconnectAnalyzer());
+    $("scope-capture").addEventListener("click", ()=>this.analyzer.captureNow());
+
+    document.querySelectorAll("[data-macro]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        if(b.dataset.macro==="info") this.bench.info();
+        if(b.dataset.macro==="i2cscan") this.bench.i2cScan();
+        if(b.dataset.macro==="spijedec") this.bench.spiJedec();
+        if(b.dataset.macro==="uartbridge") this.bench.uartBridge();
+      });
+    });
+    const send=()=>{ const v=$("cmd-input").value.trim(); if(v){ this.bench.raw(v); $("cmd-input").value=""; } };
+    $("cmd-send").addEventListener("click", send);
+    $("cmd-input").addEventListener("keydown",(e)=>{ if(e.key==="Enter") send(); });
+    const spiSend=()=>{ const v=$("spi-input").value.trim(); if(v){ this.bench.spiTxn(v); } };
+    $("spi-send").addEventListener("click", spiSend);
+    $("spi-input").addEventListener("keydown",(e)=>{ if(e.key==="Enter") spiSend(); });
+
+    // analyzer export: enabled once a capture exists, stays available after disconnect
+    this.analyzer.onCapture=()=>{ $("scope-vcd").disabled=false; $("scope-csv").disabled=false; };
+    $("scope-vcd").addEventListener("click", ()=>this.analyzer.exportVCD());
+    $("scope-csv").addEventListener("click", ()=>this.analyzer.exportCSV());
+
+    document.querySelectorAll(".collapse").forEach(b=>{
+      b.addEventListener("click",()=>{ const c=$(b.dataset.target); c.classList.toggle("collapsed"); b.textContent=c.classList.contains("collapsed")?"+":"-"; });
+    });
+
+    $("theme-btn").addEventListener("click",()=>{
+      const on=document.documentElement.getAttribute("data-theme")==="contrast";
+      if(on){ document.documentElement.removeAttribute("data-theme"); store.set("theme","night"); }
+      else { document.documentElement.setAttribute("data-theme","contrast"); store.set("theme","contrast"); }
+    });
+    $("mute-btn").addEventListener("click",()=>{
+      const m=!store.get("muted",false); store.set("muted",m); $("mute-btn").textContent=m?"Sound off":"Sound on";
+    });
+
+    $("about-btn").addEventListener("click",()=>this.modal("About / License", ABOUT_TEXT));
+    $("feedback-btn").addEventListener("click",()=>{
+      location.href="mailto:"+FEEDBACK_EMAIL+"?subject="+encodeURIComponent("BINNACLE v"+VERSION+" feedback");
+    });
+    $("modal-close").addEventListener("click",()=>$("modal-back").classList.remove("open"));
+    $("modal-back").addEventListener("click",(e)=>{ if(e.target===$("modal-back")) $("modal-back").classList.remove("open"); });
+  },
+  keyToBytes(e){
+    if(e.ctrlKey && e.key.length===1){ const c=e.key.toLowerCase().charCodeAt(0)-96; if(c>0&&c<27) return new Uint8Array([c]); }
+    switch(e.key){
+      case "Enter": return "\r";
+      case "Backspace": return new Uint8Array([0x08]);
+      case "Tab": return "\t";
+      case "Escape": return new Uint8Array([0x1b]);
+      case "ArrowUp": return "\x1b[A"; case "ArrowDown": return "\x1b[B";
+      case "ArrowRight": return "\x1b[C"; case "ArrowLeft": return "\x1b[D";
+    }
+    if(e.key.length===1 && !e.metaKey) return e.key;
+    return null;
+  },
+  setLamp(which, st){
+    const lamp=$("lamp-"+which), s=$("lamp-"+which+"-s");
+    const map={on:["on","Connected"],off:["off","Offline"],err:["err","Link lost"]};
+    const [state,label]=map[st]||map.off;
+    lamp.setAttribute("data-state",state); s.textContent=label;
+  },
+  _sniffMode(s){
+    const m=stripAnsi(s).match(PROMPT_RE);
+    if(m){ const key=m[1].toUpperCase(); if(key!==this.currentMode){ this.currentMode=key; this.renderPins(key); } }
+  },
+  renderPins(modeKey){
+    const el=$("pin-panel"); if(!el) return;
+    const map=PIN_MAP[modeKey]||{};
+    let html='<div class="pmode">Pins in '+modeKey.replace("HIZ","HiZ")+' mode</div>';
+    for(let i=0;i<8;i++){
+      const role=map[i];
+      html+='<div class="pin-chip'+(role?" active":"")+'">'+
+            '<div class="io">IO'+i+'</div><div class="role">'+(role||"")+'</div></div>';
+    }
+    el.innerHTML=html; el.classList.add("on");
+  },
+  // ---- role assignment (dynamic: either physical link can play either role) ----
+  assignTerminal(link){
+    this.termLink=link; link.mode="text";
+    link.onstate=(st)=>this.setLamp("a", st);
+    this._tUnsub1=link.subscribe(this._termFeed);
+    this._tUnsub2=link.subscribe(this._termSniff);
+    this.bench.link=link;
+    this.setLamp("a","on"); this.afterConnA(); this._updateAutoPair(); $("crt").focus();
+  },
+  assignAnalyzer(link){
+    this.scopeLink=link; link.mode="bytes";
+    link.onstate=(st)=>this.setLamp("b", st);
+    this.analyzer.link=link; this.analyzer.connectHooks();
+    this.setLamp("b","on"); this.afterConnB(); this._updateAutoPair();
+  },
+  async manualConnectTerminal(){
+    const link=this._takeFreeLink(); if(!link) return;
+    const ok=await link.connect("text");
+    if(!ok){ this._releaseLink(link); return; }
+    this.assignTerminal(link); this.verifyTerminalRole();
+  },
+  async manualConnectAnalyzer(){
+    const link=this._takeFreeLink(); if(!link) return;
+    const ok=await link.connect("bytes");
+    if(!ok){ this._releaseLink(link); return; }
+    this.assignAnalyzer(link);
+  },
+  async disconnectTerminal(){
+    const l=this.termLink; if(!l) return;
+    if(this._tUnsub1) this._tUnsub1(); if(this._tUnsub2) this._tUnsub2();
+    this.termLink=null; this.bench.link=null; $("term-warn").style.display="none";
+    this.currentMode="HIZ"; this.renderPins("HIZ");
+    try{ await l.disconnect(); }catch(_){}
+    this._releaseLink(l); this.afterDiscA(); this._updateAutoPair();
+  },
+  async disconnectAnalyzer(){
+    const l=this.scopeLink; if(!l) return;
+    this.analyzer.disconnectHooks(); this.analyzer.link=null; this.scopeLink=null;
+    try{ await l.disconnect(); }catch(_){}
+    this._releaseLink(l); this.afterDiscB(); this._updateAutoPair();
+  },
+  // ---- one-click auto-pair: connect a port, probe it, assign the right role ----
+  async autoPair(){
+    if(this.termLink && this.scopeLink) return;
+    $("auto-pair").disabled=true;
+    const link=this._takeFreeLink();
+    if(!link){ this._updateAutoPair(); return; }
+    const ok=await link.connect("text");   // open as text so we can probe
+    if(!ok){ this._releaseLink(link); this._updateAutoPair(); return; }
+    const probe=await this._probeLink(link);
+    const role=decideRole(probe.role, !this.termLink, !this.scopeLink);
+    if(role==="terminal"){
+      this.assignTerminal(link);
+      if(probe.raw) this.term.feed(probe.raw);
+      if(probe.role==="binmode") this._showTermWarn("binmode");
+    } else {
+      this.assignAnalyzer(link);
+    }
+    this._updateAutoPair();
+  },
+  _probeLink(link){
+    return new Promise((resolve)=>{
+      let raw="";
+      const unsub=link.subscribe((s)=>{ raw += (typeof s==="string") ? s : new TextDecoder().decode(s); });
+      link.write("\r");
+      setTimeout(()=>{ unsub(); resolve({ role:classifyPortText(raw), raw }); }, 650);
+    });
+  },
+  _updateAutoPair(){
+    const btn=$("auto-pair"); if(!btn) return;
+    if(this.termLink && this.scopeLink){ btn.disabled=true; btn.textContent="Ports paired"; }
+    else if(this.termLink || this.scopeLink){ btn.disabled=false; btn.textContent="Pair the other port"; }
+    else { btn.disabled=false; btn.textContent="Auto-pair ports"; }
+  },
+  async verifyTerminalRole(){
+    let raw="";
+    const link=this.termLink; if(!link) return;
+    const unsub=link.subscribe((s)=>{ if(typeof s==="string") raw+=s; });
+    await link.write("\r");
+    await new Promise(r=>setTimeout(r,600));
+    unsub();
+    this._showTermWarn(classifyPortText(raw));
+  },
+  _showTermWarn(role){
+    const warn=$("term-warn");
+    if(role==="terminal"){ warn.style.display="none"; return; }
+    warn.style.display="block";
+    warn.textContent = (role==="binmode")
+      ? "No Bus Pirate prompt on this port. This looks like the analyzer/binmode port. Disconnect and use the other port for the terminal."
+      : "No prompt seen yet. If the screen stays blank after you press Enter, this may be the wrong port.";
+  },
+  afterConnA(){
+    $("conn-a").disabled=true; $("disc-a").disabled=false;
+    $("cmd-input").disabled=false; $("cmd-send").disabled=false;
+    $("spi-input").disabled=false; $("spi-send").disabled=false;
+    document.querySelectorAll("[data-macro]").forEach(b=>b.disabled=false);
+    $("cmd-input").placeholder="Send a raw command";
+    $("term-hint").textContent="Link live. Click the screen and type. Choose VT100 mode if the Bus Pirate asks.";
+  },
+  afterDiscA(){
+    $("conn-a").disabled=false; $("disc-a").disabled=true;
+    $("cmd-input").disabled=true; $("cmd-send").disabled=true;
+    $("spi-input").disabled=true; $("spi-send").disabled=true;
+    $("term-warn").style.display="none";
+    document.querySelectorAll("[data-macro]").forEach(b=>b.disabled=true);
+  },
+  afterConnB(){ $("conn-b").disabled=true; $("disc-b").disabled=false; $("scope-capture").disabled=false; },
+  afterDiscB(){ $("conn-b").disabled=false; $("disc-b").disabled=true; $("scope-capture").disabled=true; },
+  modal(title, body){ $("modal-title").textContent=title; $("modal-body").innerHTML="<pre></pre>"; $("modal-body").querySelector("pre").textContent=body; $("modal-back").classList.add("open"); }
+};
+
+const ABOUT_TEXT =
+"BINNACLE v"+VERSION+"\n"+
+"A browser console for the Bus Pirate 5.\n"+
+"Copyright (C) 2026 M. B. Parks / Green Shoe Garage.\n\n"+
+"This program is free software: you can redistribute it and/or modify it\n"+
+"under the terms of the GNU General Public License as published by the Free\n"+
+"Software Foundation, either version 3 of the License, or (at your option)\n"+
+"any later version.\n\n"+
+"This program is distributed in the hope that it will be useful, but WITHOUT\n"+
+"ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS\n"+
+"FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.\n\n"+
+"You should have received a copy of the GNU General Public License along with\n"+
+"this program. If not, see the file COPYING distributed with this program.\n\n"+
+"Known limitations (v1.0.0):\n"+
+"- Web Serial only: Chrome, Edge, or Opera on desktop, over HTTPS or localhost.\n"+
+"- Auto-pair opens each port and probes it to assign the terminal and analyzer\n"+
+"  roles. If a port cannot be classified, connect that role by hand.\n"+
+"- The terminal is a VT100 subset; some rare escape sequences are ignored.\n"+
+"- The pin panel shows the fixed per-mode labels from the firmware. Live pin\n"+
+"  voltages stay on the device LCD and statusbar.\n"+
+"- Bench macros accept menu defaults; non-default speeds or bits need the raw line.\n"+
+"- SPI byte parsing extracts every 0xNN token, so the command echo can appear with\n"+
+"  read data. The raw reply is shown too.\n"+
+"- The UART bridge is transparent and can only be exited by pressing the physical\n"+
+"  button on the Bus Pirate.\n"+
+"- The analyzer uses FALA. Set the Bus Pirate binmode to Follow along logic\n"+
+"  analyzer first, then run a transaction on the terminal.\n"+
+"- VCD and CSV export the last capture; very long captures make large files.\n"+
+"- Standalone SUMP capture (arm and trigger without a terminal transaction) is out\n"+
+"  of scope for the 1.0 MVP; use PulseView for that workflow.";
+
+/* ---- self-test (?test=1): assert the ANSI emulator core -------------------- */
+function runTests(){
+  const out=$("test-report"); out.style.display="block"; $("app").style.display="none";
+  const results=[]; const canvas=document.createElement("canvas");
+  const t=new AnsiTerminal(canvas,{cols:20,rows:6});
+  const check=(name, cond)=>results.push([name, !!cond]);
+
+  t.feed("hello");                         check("prints text", t.grid[0].slice(0,5).map(c=>c.ch).join("")==="hello");
+  t.feed("\r\nworld");                     check("CRLF newline", t.grid[1].slice(0,5).map(c=>c.ch).join("")==="world");
+  t.reset(); t.feed("\x1b[31mR\x1b[0mX");  check("SGR red then reset", t.grid[0][0].fg===1 && t.grid[0][1].fg===t.defFg);
+  t.reset(); t.feed("\x1b[3;5Hq");         check("cursor CUP places char", t.grid[2][4].ch==="q");
+  t.reset(); t.feed("abc\x1b[2K");         check("erase line clears row", t.grid[0].every(c=>c.ch===" "));
+  t.reset(); t.feed("junk\x1b[2Jz");       check("erase display + home", t.grid[0][0].ch==="z");
+  t.reset(); t.feed("\x1b[?25lx");         check("cursor hide consumed", t.grid[0][0].ch==="x" && t.cursorVis===false);
+  t.reset(); for(let i=0;i<7;i++) t.feed("L"+i+"\r\n"); check("scroll keeps last rows", t.grid[t.rows-1].slice(0,2).join?false:true);
+
+  // formatters
+  check("fmtHz MHz", fmtHz(8000000)==="8 MHz");
+  check("fmtHz kHz", fmtHz(400000)==="400 kHz");
+  check("fmtDur ns", fmtDur(0.0000005)==="500 ns");
+
+  // FALA protocol state machine
+  const writes=[];
+  const fakeLink={ subscribe(fn){ this._fn=fn; return ()=>{}; }, write(u8){ writes.push(Array.from(u8)); } };
+  const els={ id:{}, meta:{}, status:{}, auto:{checked:true} };
+  const az=new Analyzer(fakeLink, document.createElement("canvas"), els);
+  az.connectHooks();
+  let captured=null; az._render=(s)=>{ captured=Array.from(s); };
+  const enc=(s)=>new TextEncoder().encode(s);
+  check("FALA probes on connect", writes.some(w=>w.length===1 && w[0]===0x3f));
+  az.onData(enc("$FALADATA;8;0;0;N;8000000;4;0;\n"));
+  check("FALA parses metadata", az.meta && az.meta.samples===4 && az.meta.speed===8000000);
+  check("FALA auto-requests dump", writes.some(w=>w.length===1 && w[0]===0x2b));
+  az.onData(new Uint8Array([0x01,0x02,0x04,0x08]));   // newest first
+  check("FALA reverses to chronological", captured && captured.join(",")==="8,4,2,1");
+  check("FALA returns to idle", az.state==="idle");
+
+  // I2C scan parsing
+  const scanTxt="I2C address search:\r\n0x50 (0xA0 W) (0xA1 R) 24LC64 EEPROM\r\n0x68 (0xD0 W) (0xD1 R)\r\nFound 2 addresses, 2 W/R pairs.\r\n";
+  const dev=parseI2CScan(scanTxt);
+  check("I2C scan finds addresses", dev.length===2 && dev[0].addr===0x50 && dev[1].addr===0x68);
+  check("I2C scan keeps device name", dev[0].name==="24LC64 EEPROM");
+  check("hex byte parse", parseHexBytes("[ 0x9F 0xEF 0x40 0x18 ]").join(",")==="159,239,64,24");
+
+  // export generators
+  const es=new Uint8Array([0x00,0x01,0x00]); // IO0: 0,1,0
+  const vcd=genVCD(es,8,1000000);
+  check("VCD has header", vcd.indexOf("$timescale 1 ps")>=0 && vcd.indexOf("$var wire 1 ! IO0")>=0);
+  check("VCD records the rising edge", vcd.indexOf("1!")>=0 && vcd.indexOf("0!")>=0);
+  const csv=genCSV(es,2,1000000).split("\n");
+  check("CSV header + rows", csv[0]==="time_s,IO0,IO1" && csv[1].endsWith(",0,0") && csv[2].endsWith(",1,0"));
+
+  // port classifier
+  check("classify VT100 as terminal", classifyPortText("\x1b[2Jhello")==="terminal");
+  check("classify prompt as terminal", classifyPortText("stuff\r\nI2C> ")==="terminal");
+  check("classify FALADATA as binmode", classifyPortText("$FALADATA;8;0;0;N;8000000;4;0;\n")==="binmode");
+  check("classify silence as binmode", classifyPortText("")==="binmode");
+  // pin map
+  check("pin map I2C", PIN_MAP.I2C[0]==="SDA" && PIN_MAP.I2C[1]==="SCL");
+  check("pin map SPI", PIN_MAP.SPI[6]==="CLK" && PIN_MAP.SPI[7]==="MOSI");
+  check("pin map UART", PIN_MAP.UART[4]==="TX" && PIN_MAP.UART[5]==="RX");
+  // auto-pair role decision
+  check("decide both-free terminal", decideRole("terminal",true,true)==="terminal");
+  check("decide both-free binmode", decideRole("binmode",true,true)==="analyzer");
+  check("decide term-taken", decideRole("terminal",false,true)==="analyzer");
+  check("decide scope-taken", decideRole("binmode",true,false)==="terminal");
+
+  const pass=results.filter(r=>r[1]).length;
+  out.innerHTML="<h2>BINNACLE self-test</h2>"+
+    results.map(r=>`<div class="${r[1]?'pass':'fail'}">${r[1]?'PASS':'FAIL'}  ${r[0]}</div>`).join("")+
+    `<div style="margin-top:12px">${pass}/${results.length} passing</div>`;
+}
+
+/* ---- boot ----------------------------------------------------------------- */
+window.addEventListener("DOMContentLoaded", ()=>{ if(TEST) runTests(); else App.init(); });
+</script>
+</body>
+</html>
