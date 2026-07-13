@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BINNACLE v1.0.0 | build marker: binnacle-1-0-0 | Bus Pirate 5 browser console -->
+<!-- BINNACLE v1.1.0 | build marker: binnacle-1-1-0 | Bus Pirate 5 browser console -->
 <!--
   BINNACLE, a browser console for the Bus Pirate 5.
   Copyright (C) 2026 M. B. Parks / Green Shoe Garage.
@@ -217,7 +217,46 @@
   .scope-auto{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink); cursor:pointer}
   .scope-auto input{accent-color:var(--verdigris)}
   .scope-canvas-wrap{border:1px solid var(--rule); border-radius:var(--radius); background:var(--crt-bg); overflow:hidden}
-  .scope-canvas-wrap canvas{display:block; width:100%; height:auto}
+  .scope-canvas-wrap canvas{display:block; width:100%; height:auto; cursor:grab}
+  .scope-canvas-wrap canvas.dragging{cursor:grabbing}
+
+  .scope-group{
+    border:1px solid var(--rule); border-radius:var(--radius); background:var(--panel-2);
+    padding:9px 10px; display:flex; flex-direction:column; gap:7px;
+  }
+  .scope-group .gtitle{
+    font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--brass); font-weight:600;
+  }
+  select{
+    background:var(--crt-bg); color:var(--ink); border:1px solid var(--rule);
+    border-radius:2px; padding:5px 6px; font-family:var(--mono); font-size:12px; width:100%;
+  }
+  select:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .fld{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted)}
+  .fld > span{flex:0 0 58px}
+  .sump-only, .dec-opts{display:flex; flex-direction:column; gap:7px}
+
+  .zoom-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .zoom-bar .btn{padding:4px 10px}
+  .view-label{font-family:var(--mono); font-size:11px; color:var(--verdigris)}
+  .zoom-hint{margin-left:auto; font-size:11px; color:var(--muted)}
+
+  .preset-bar{display:flex; flex-direction:column; gap:8px}
+  .preset-row{display:flex; gap:6px; flex-wrap:wrap}
+  .preset{
+    display:inline-flex; align-items:center; gap:6px; background:var(--panel-2);
+    border:1px solid var(--rule); border-radius:2px; padding:3px 4px 3px 9px; font-size:12px;
+  }
+  .preset button.run{
+    background:none; border:none; color:var(--brass); cursor:pointer; font-family:var(--mono);
+    font-size:12px; padding:1px 2px;
+  }
+  .preset button.run:hover{text-decoration:underline}
+  .preset button.del{
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; line-height:1; padding:1px 4px;
+  }
+  .preset button.del:hover{color:var(--alert)}
+  .pin-chip .volt{font-size:10px; color:var(--brass); margin-top:2px; min-height:13px}
 
   /* Footer */
   footer{
@@ -326,6 +365,14 @@
           <button class="btn" data-macro="i2cscan" disabled>Scan I2C bus</button>
           <button class="btn" data-macro="spijedec" disabled>SPI JEDEC id</button>
           <button class="btn" data-macro="uartbridge" disabled>UART bridge</button>
+          <button class="btn" data-macro="voltages" disabled>Read voltages</button>
+        </div>
+        <div class="preset-bar">
+          <div class="preset-row" id="preset-list"></div>
+          <div class="cmd-line">
+            <input id="preset-name" placeholder="Save the command below as a preset, name it here" autocomplete="off" spellcheck="false">
+            <button class="btn" id="preset-save">Save</button>
+          </div>
         </div>
         <div class="i2c-grid" id="i2c-grid" aria-label="I2C address map"></div>
         <div class="cmd-line">
@@ -374,7 +421,87 @@
               <button class="btn" id="scope-csv" disabled>Export CSV</button>
             </div>
             <div class="scope-status" id="scope-status"></div>
+
+            <div class="scope-group">
+              <div class="gtitle">Capture source</div>
+              <select id="scope-src">
+                <option value="fala">FALA (follow along)</option>
+                <option value="sump">SUMP (standalone)</option>
+              </select>
+              <div class="sump-only" id="sump-controls" style="display:none">
+                <label class="fld"><span>Rate</span>
+                  <select id="sump-rate">
+                    <option value="1000000">1 MHz</option>
+                    <option value="4000000" selected>4 MHz</option>
+                    <option value="10000000">10 MHz</option>
+                    <option value="25000000">25 MHz</option>
+                    <option value="50000000">50 MHz</option>
+                  </select>
+                </label>
+                <label class="fld"><span>Samples</span>
+                  <select id="sump-samples">
+                    <option value="4096">4096</option>
+                    <option value="16384" selected>16384</option>
+                    <option value="65536">65536</option>
+                    <option value="131072">131072</option>
+                  </select>
+                </label>
+                <label class="fld"><span>Trigger</span>
+                  <select id="sump-trigpin">
+                    <option value="-1">None (free run)</option>
+                    <option value="0">IO0</option><option value="1">IO1</option>
+                    <option value="2">IO2</option><option value="3">IO3</option>
+                    <option value="4">IO4</option><option value="5">IO5</option>
+                    <option value="6">IO6</option><option value="7">IO7</option>
+                  </select>
+                </label>
+                <label class="fld"><span>Level</span>
+                  <select id="sump-triglvl">
+                    <option value="0">Low</option>
+                    <option value="1" selected>High</option>
+                  </select>
+                </label>
+                <div class="macro-row">
+                  <button class="btn primary" id="sump-arm" disabled>Arm</button>
+                  <button class="btn" id="sump-stop" disabled>Stop</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="scope-group">
+              <div class="gtitle">Decode</div>
+              <select id="dec-kind">
+                <option value="none">None</option>
+                <option value="i2c">I2C</option>
+                <option value="spi">SPI</option>
+                <option value="uart">UART</option>
+              </select>
+              <div id="dec-uart" class="dec-opts" style="display:none">
+                <label class="fld"><span>Baud</span>
+                  <select id="dec-baud">
+                    <option>9600</option><option>19200</option><option>38400</option>
+                    <option selected>115200</option><option>230400</option>
+                  </select>
+                </label>
+              </div>
+              <div id="dec-spi" class="dec-opts" style="display:none">
+                <label class="fld"><span>Mode</span>
+                  <select id="dec-spimode">
+                    <option value="0" selected>0 (CPOL0/CPHA0)</option>
+                    <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                  </select>
+                </label>
+              </div>
+              <div class="macro-note" id="dec-note">Pins follow the bus mode map (I2C: SDA IO0, SCL IO1; SPI: IO4-7; UART: RX IO5).</div>
+            </div>
           </div>
+        </div>
+        <div class="zoom-bar">
+          <button class="btn" id="zoom-in" disabled>+</button>
+          <button class="btn" id="zoom-out" disabled>-</button>
+          <button class="btn" id="zoom-fit" disabled>Fit</button>
+          <span class="view-label" id="view-label"></span>
+          <span class="zoom-hint">Scroll to zoom, drag to pan</span>
         </div>
         <div class="scope-canvas-wrap">
           <canvas id="scope-canvas"></canvas>
@@ -413,12 +540,23 @@
    =========================================================================== */
 
 /* ---- CONFIG --------------------------------------------------------------- */
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const FEEDBACK_EMAIL = "feedback@greenshoegarage.com"; // TODO: set your address
 const BP5_USB = { usbVendorId: 0x1209 }; // hint filter; BP5 firmware USB VID. Selection stays open.
 const COLS = 80, ROWS = 34;             // terminal grid (statusbar lives near the bottom)
 const FONT_PX = 13;                     // base cell font size
 const PROMPT_RE = /(?:^|\n)\s*(HiZ|1WIRE|UART|HDUART|I2C|SPI|2WIRE|3WIRE|DIO|LED|INFRARED|JTAG)[^>\n]*>\s*$/;
+// A mode-entry submenu prompt: the firmware prints the question, the default in
+// parentheses, then "> ". It is a prompt that is NOT a mode prompt.
+const MENU_RE = /\(\s*[^)\n]{1,24}\s*\)\s*>\s*\x03?\s*$/;
+// Tunables. Menu walking is prompt-driven, so these are safety nets, not timing hacks.
+const TIMING = {
+  probeStepMs: 120,     // how often the auto-pair probe re-checks for a verdict
+  probeMaxMs:  2000,    // give up classifying a port after this
+  menuQuietMs: 400,     // silence that ends a reply when no prompt is seen
+  menuMaxMs:   6000,    // total budget for walking into a bus mode
+  menuSteps:   12       // max submenu questions to answer before giving up
+};
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has("debug");
@@ -719,7 +857,29 @@ function parseI2CScan(text){
   }
   return out;
 }
-// Extract 0xNN byte tokens from a device reply, in order.
+// Split a bus transaction reply into written and read bytes. The firmware labels
+// them (syntax_post.c prints "TX:" for what went out and "RX:" for what came back),
+// so read data can be separated from the command echo exactly rather than guessed.
+// Falls back to every 0xNN token when no labels are present.
+function parseTxRx(text){
+  const clean=stripAnsi(text);
+  const grab=(label)=>{
+    const out=[]; const re=new RegExp(label+":([^\\n]*(?:\\n(?!\\s*(?:TX|RX):)[^\\n]*)*)","g");
+    let m;
+    while((m=re.exec(clean))){
+      const seg=m[1];
+      const hx=seg.match(/0x[0-9A-Fa-f]{2}/g)||[];
+      for(const h of hx) out.push(parseInt(h,16));
+    }
+    return out;
+  };
+  const tx=grab("TX"), rx=grab("RX");
+  if(!tx.length && !rx.length){
+    return { tx:[], rx:(clean.match(/0x[0-9A-Fa-f]{2}/g)||[]).map(h=>parseInt(h,16)), labeled:false };
+  }
+  return { tx, rx, labeled:true };
+}
+// Extract 0xNN byte tokens from a device reply, in order (legacy helper).
 function parseHexBytes(text){
   return (text.match(/0x[0-9A-Fa-f]{2}/g)||[]).map(h=>parseInt(h,16));
 }
@@ -755,6 +915,158 @@ function genCSV(samples, ch, speed){
   }
   return rows.join("\n")+"\n";
 }
+/* ---- protocol decoders ----------------------------------------------------
+   Each takes the chronological sample array (one byte per sample, bit N = IO N)
+   and returns annotations: {s,e,t,k} = start sample, end sample, text, kind.
+   Kinds: frame (START/STOP), addr, data, ack, err.                        ---- */
+const bitAt = (samples,i,b)=> (samples[i]>>b)&1;
+
+function decodeI2C(samples, sdaBit, sclBit){
+  const out=[]; const n=samples.length;
+  let bits=[], bitStart=0, inFrame=false, isFirstByte=false, awaitingAck=false;
+  const pushByte=(endIdx)=>{
+    const val=bits.reduce((a,b)=>(a<<1)|b, 0);
+    if(isFirstByte){
+      const addr=val>>1, rw=(val&1)?"R":"W";
+      out.push({s:bitStart, e:endIdx, t:"0x"+addr.toString(16).padStart(2,"0")+" "+rw, k:"addr"});
+      isFirstByte=false;
+    } else {
+      out.push({s:bitStart, e:endIdx, t:"0x"+val.toString(16).padStart(2,"0"), k:"data"});
+    }
+    bits=[]; awaitingAck=true;
+  };
+  for(let i=1;i<n;i++){
+    const scl=bitAt(samples,i,sclBit), sclP=bitAt(samples,i-1,sclBit);
+    const sda=bitAt(samples,i,sdaBit), sdaP=bitAt(samples,i-1,sdaBit);
+    // START / STOP: SDA transitions while SCL is high
+    if(scl===1 && sclP===1 && sda!==sdaP){
+      if(sda===0){ out.push({s:i,e:i,t:"START",k:"frame"}); inFrame=true; isFirstByte=true; bits=[]; awaitingAck=false; }
+      else       { out.push({s:i,e:i,t:"STOP", k:"frame"}); inFrame=false; bits=[]; awaitingAck=false; }
+      continue;
+    }
+    if(!inFrame) continue;
+    if(scl===1 && sclP===0){                       // sample on SCL rising edge
+      if(awaitingAck){
+        out.push({s:i,e:i,t:(sda===0?"ACK":"NAK"), k:"ack"});
+        awaitingAck=false; continue;
+      }
+      if(bits.length===0) bitStart=i;
+      bits.push(sda);
+      if(bits.length===8) pushByte(i);
+    }
+  }
+  return out;
+}
+
+function decodeSPI(samples, clkBit, mosiBit, misoBit, csBit, cpol, cpha){
+  const out=[]; const n=samples.length;
+  cpol=cpol?1:0; cpha=cpha?1:0;
+  // Sample on the "capture" edge: for CPHA=0 that is the leading edge.
+  const captureRising = (cpol===cpha);  // mode0/mode3 capture on rising, mode1/mode2 on falling
+  let mo=[], mi=[], bitStart=0, active=(csBit<0);
+  for(let i=1;i<n;i++){
+    if(csBit>=0){
+      const cs=bitAt(samples,i,csBit), csP=bitAt(samples,i-1,csBit);
+      if(cs===0 && csP===1){ active=true; mo=[]; mi=[]; out.push({s:i,e:i,t:"CS",k:"frame"}); continue; }
+      if(cs===1 && csP===0){ active=false; mo=[]; mi=[]; out.push({s:i,e:i,t:"/CS",k:"frame"}); continue; }
+      if(cs===1) continue;
+    }
+    if(!active) continue;
+    const c=bitAt(samples,i,clkBit), cP=bitAt(samples,i-1,clkBit);
+    const edgeUp = (c===1 && cP===0), edgeDn = (c===0 && cP===1);
+    const capture = captureRising ? edgeUp : edgeDn;
+    if(!capture) continue;
+    if(mo.length===0) bitStart=i;
+    mo.push(mosiBit>=0?bitAt(samples,i,mosiBit):0);
+    mi.push(misoBit>=0?bitAt(samples,i,misoBit):0);
+    if(mo.length===8){
+      const bo=mo.reduce((a,b)=>(a<<1)|b,0), bi=mi.reduce((a,b)=>(a<<1)|b,0);
+      let t="0x"+bo.toString(16).padStart(2,"0");
+      if(misoBit>=0) t += " / 0x"+bi.toString(16).padStart(2,"0");
+      out.push({s:bitStart, e:i, t, k:"data"});
+      mo=[]; mi=[];
+    }
+  }
+  return out;
+}
+
+function decodeUART(samples, lineBit, sampleHz, baud){
+  const out=[]; const n=samples.length;
+  const spb = sampleHz/baud;                       // samples per bit
+  if(!isFinite(spb) || spb < 2) return out;        // cannot decode below 2 samples/bit
+  let i=1;
+  while(i<n){
+    // find falling edge = start bit
+    if(!(bitAt(samples,i,lineBit)===0 && bitAt(samples,i-1,lineBit)===1)){ i++; continue; }
+    const start=i;
+    const at=(k)=> Math.round(start + spb*(k+0.5));  // center of bit k (0 = start bit)
+    if(at(9) >= n) break;
+    let val=0, ok=true;
+    for(let b=0;b<8;b++){                            // LSB first, 8N1
+      const idx=at(1+b); if(idx>=n){ ok=false; break; }
+      val |= bitAt(samples,idx,lineBit) << b;
+    }
+    const stopIdx=at(9);
+    const stopOk = stopIdx<n && bitAt(samples,stopIdx,lineBit)===1;
+    const end=Math.min(n-1, stopIdx);
+    if(ok){
+      const pr=(val>=32 && val<127) ? " '"+String.fromCharCode(val)+"'" : "";
+      out.push({s:start, e:end, t:"0x"+val.toString(16).padStart(2,"0")+pr, k: stopOk?"data":"err"});
+    }
+    i = end+1;
+  }
+  return out;
+}
+
+/* ---- SUMP command math (firmware: src/binmode/sump.c) ----------------------
+   Standard SUMP: divider = val+1, sample rate = 100MHz / divider.
+   Firmware read_count = ((val & 0xffff) + 1) * 4, so samples are a multiple of 4.
+   -------------------------------------------------------------------------- */
+const SUMP_BASE_HZ = 100000000;
+function sumpDividerFor(rateHz){
+  let val = Math.round(SUMP_BASE_HZ / rateHz) - 1;
+  if(val < 0) val = 0;
+  if(val > 65535) val = 65535;
+  return val;
+}
+function sumpRateFor(val){ return SUMP_BASE_HZ / (val + 1); }
+function sumpCountsFor(samples){
+  // returns {val, actual} where the device will return `actual` samples
+  let q = Math.round(samples/4);
+  if(q < 1) q = 1;
+  if(q > 65536) q = 65536;
+  const val = q - 1;
+  return { val, actual: q*4 };
+}
+// 32-bit little-endian payload after a long SUMP opcode
+function sumpLong(op, val){
+  return new Uint8Array([op, val & 0xff, (val>>>8) & 0xff, (val>>>16) & 0xff, (val>>>24) & 0xff]);
+}
+
+/* ---- voltage parsing (firmware `v` command) --------------------------------
+   `v` prints a tab-separated pin-name row (IO0..IO7) and a value row of
+   "%3.1f" readings. Align by column so we do not assume the header layout.  -- */
+function parseVoltages(text){
+  const lines=stripAnsi(text).split(/\r?\n/);
+  for(let i=0;i<lines.length;i++){
+    if(!(/\bIO0\b/.test(lines[i]) && /\bIO7\b/.test(lines[i]))) continue;
+    const names=lines[i].split("\t").map(s=>s.trim());
+    for(let j=i+1;j<Math.min(lines.length, i+5);j++){
+      if(!/\d(?:\.\d+)?\s*V/i.test(lines[j])) continue;
+      const vals=lines[j].split("\t").map(s=>s.trim());
+      const out={};
+      for(let k=0;k<names.length;k++){
+        const nm=/^IO([0-7])$/.exec(names[k]);
+        if(!nm || vals[k]===undefined) continue;
+        const vm=/(-?\d+(?:\.\d+)?)\s*V/i.exec(vals[k]);
+        if(vm) out[+nm[1]]=parseFloat(vm[1]);
+      }
+      if(Object.keys(out).length) return out;
+    }
+  }
+  return null;
+}
+
 function downloadText(name, text, mime){
   const blob=new Blob([text], {type:mime||"text/plain"});
   const url=URL.createObjectURL(blob);
@@ -766,35 +1078,38 @@ function downloadText(name, text, mime){
 class ProtocolBench {
   constructor(link, outEl, gridEl){ this.link=link; this.out=outEl; this.gridEl=gridEl; this.busy=false; }
   print(s){ this.out.textContent = s; }
-  // Send a command, resolve when the mode prompt returns or the line goes quiet.
-  // Returns { clean, atMode }. atMode true means a mode/HiZ prompt was seen.
+  // Send a command and resolve when a prompt appears (mode prompt or submenu
+  // question) or the line goes quiet. Prompt-driven, so it does not rely on timing.
   drive(cmd, quietMs, maxMs){
     return new Promise((resolve)=>{
-      if(!this.link){ resolve({clean:"", atMode:false}); return; }
+      if(!this.link){ resolve({clean:"", atMode:false, atMenu:false}); return; }
       let buf="", last=Date.now(), started=false;
       const unsub=this.link.subscribe((s)=>{ buf+=s; last=Date.now(); started=true; });
       this.link.write(cmd + "\r");
       const t0=Date.now();
       const tick=()=>{
         const clean=stripAnsi(buf);
-        if(PROMPT_RE.test(clean)){ unsub(); return resolve({clean, atMode:true}); }
-        if(started && Date.now()-last > (quietMs||220)){ unsub(); return resolve({clean, atMode:false}); }
-        if(Date.now()-t0 > (maxMs||3000)){ unsub(); return resolve({clean, atMode:false}); }
+        if(PROMPT_RE.test(clean)){ unsub(); return resolve({clean, atMode:true, atMenu:false}); }
+        if(MENU_RE.test(clean)){ unsub(); return resolve({clean, atMode:false, atMenu:true}); }
+        if(started && Date.now()-last > (quietMs||TIMING.menuQuietMs)){ unsub(); return resolve({clean, atMode:false, atMenu:false}); }
+        if(Date.now()-t0 > (maxMs||TIMING.menuMaxMs)){ unsub(); return resolve({clean, atMode:false, atMenu:false}); }
         setTimeout(tick, 40);
       }; tick();
     });
   }
   _promptIs(clean, mode){ const m=clean.match(PROMPT_RE); return !!(m && m[1].toUpperCase()===mode.toUpperCase()); }
-  // Enter a bus mode, accepting each submenu default with Enter until the mode prompt shows.
+  // Enter a bus mode. Each submenu question is answered with Enter (accept default)
+  // as soon as it is detected, rather than after a fixed delay.
   async enterMode(mode){
-    let res=await this.drive("m "+mode, 260, 3500);
-    let guard=0;
-    while(!this._promptIs(res.clean, mode) && guard<10){
-      if(/>\s*$/.test(res.clean)) res=await this.drive("", 260, 3000); // accept default
-      else break;
-      guard++;
+    let res=await this.drive("m "+mode, TIMING.menuQuietMs, TIMING.menuMaxMs);
+    let steps=0;
+    while(!this._promptIs(res.clean, mode) && steps<TIMING.menuSteps){
+      if(res.atMenu || /(?:\(\s*[^)\n]{1,24}\s*\)\s*)?>\s*\x03?\s*$/.test(res.clean)){
+        res=await this.drive("", TIMING.menuQuietMs, TIMING.menuMaxMs);   // accept default
+        steps++;
+      } else break;
     }
-    return res.clean;
+    return { clean:res.clean, ok:this._promptIs(res.clean, mode), steps };
   }
   async info(){
     if(this.busy) return; this.busy=true;
@@ -805,36 +1120,48 @@ class ProtocolBench {
   async i2cScan(){
     if(this.busy) return; this.busy=true;
     this.print("Entering I2C and scanning...");
-    await this.enterMode("i2c");
-    const r=await this.drive("scan", 400, 5000);
+    const m=await this.enterMode("i2c");
+    if(!m.ok){ this.print("Could not reach the I2C prompt. Raw:\n"+m.clean.trim()); this.busy=false; return; }
+    const r=await this.drive("scan", 500, 6000);
     const found=parseI2CScan(r.clean);
     this._renderGrid(found);
     this.print(found.length
       ? "Found "+found.length+" I2C device(s): "+found.map(f=>"0x"+f.addr.toString(16).padStart(2,"0")).join(", ")
-      : "No I2C devices answered. Check wiring, pull-ups, and mode prompts.");
+      : "No I2C devices answered. Check wiring, pull-ups, and power.");
     this.busy=false;
   }
   async spiJedec(){
     if(this.busy) return; this.busy=true;
     this.print("Entering SPI and reading JEDEC id...");
-    await this.enterMode("spi");
-    const r=await this.drive("[0x9f r:3]", 350, 3000);
-    const bytes=parseHexBytes(r.clean);
-    // The first byte is usually the 0x9F command echo; the read bytes follow.
-    const read=bytes.slice(-3);
-    this.print(read.length
-      ? "JEDEC id (mfr, type, capacity): "+read.map(b=>"0x"+b.toString(16).padStart(2,"0")).join(" ")+"\n\nRaw:\n"+r.clean.trim()
-      : "No bytes parsed. Raw reply:\n"+r.clean.trim());
+    const m=await this.enterMode("spi");
+    if(!m.ok){ this.print("Could not reach the SPI prompt. Raw:\n"+m.clean.trim()); this.busy=false; return; }
+    const r=await this.drive("[0x9f r:3]", 450, 4000);
+    const p=parseTxRx(r.clean);
+    const read=p.labeled ? p.rx : p.rx.slice(-3);
+    if(read.length>=3){
+      const hex=(b)=>"0x"+b.toString(16).padStart(2,"0");
+      this.print("JEDEC id\n  Manufacturer: "+hex(read[0])+
+                 "\n  Type:         "+hex(read[1])+
+                 "\n  Capacity:     "+hex(read[2])+"  ("+fmtBytes(1<<read[2])+")"+
+                 "\n\nRaw:\n"+r.clean.trim());
+    } else {
+      this.print("No read bytes returned. Raw:\n"+r.clean.trim());
+    }
     this.busy=false;
   }
   async spiTxn(txn){
     if(this.busy) return; this.busy=true;
     const cmd = /^\s*\[/.test(txn) ? txn : "["+txn+"]";
     this.print("SPI: "+cmd);
-    await this.enterMode("spi");
-    const r=await this.drive(cmd, 350, 3000);
-    const bytes=parseHexBytes(r.clean);
-    this.print("Bytes: "+(bytes.length?bytes.map(b=>"0x"+b.toString(16).padStart(2,"0")).join(" "):"(none)")+"\n\nRaw:\n"+r.clean.trim());
+    const m=await this.enterMode("spi");
+    if(!m.ok){ this.print("Could not reach the SPI prompt. Raw:\n"+m.clean.trim()); this.busy=false; return; }
+    const r=await this.drive(cmd, 450, 5000);
+    const p=parseTxRx(r.clean);
+    const hex=(a)=>a.length?a.map(b=>"0x"+b.toString(16).padStart(2,"0")).join(" "):"(none)";
+    this.print((p.labeled
+        ? "Sent (TX): "+hex(p.tx)+"\nRead (RX): "+hex(p.rx)
+        : "Bytes: "+hex(p.rx)+"\n(no TX/RX labels in reply; showing all bytes)")+
+      "\n\nRaw:\n"+r.clean.trim());
     this.busy=false;
   }
   async raw(cmd){
@@ -843,11 +1170,22 @@ class ProtocolBench {
     const r=await this.drive(cmd, 300, 2500);
     this.print(r.clean.trim()||"(no reply)"); this.busy=false;
   }
+  async readVoltages(){
+    if(this.busy || !this.link) return null;
+    this.busy=true;
+    const r=await this.drive("v", 350, 2500);
+    this.busy=false;
+    const v=parseVoltages(r.clean);
+    if(!v){ this.print("Could not parse voltages. Raw reply:\n"+r.clean.trim()); return null; }
+    this.print("Pin voltages: "+Object.keys(v).map(k=>"IO"+k+" "+v[k].toFixed(1)+"V").join("  "));
+    return v;
+  }
   async uartBridge(){
     if(this.busy) return; this.busy=true;
     this.print("Entering UART and starting the transparent bridge...");
-    await this.enterMode("uart");
-    const r=await this.drive("(1)", 400, 3000);   // macro 1: transparent UART bridge
+    const m=await this.enterMode("uart");
+    if(!m.ok){ this.print("Could not reach the UART prompt. Raw:\n"+m.clean.trim()); this.busy=false; return; }
+    const r=await this.drive("(1)", 500, 4000);   // macro 1: transparent UART bridge
     this.print("Bridge started. Traffic now passes through the terminal screen.\n"+
                "The bridge can only be exited by pressing the physical button on the Bus Pirate.\n\n"+
                r.clean.trim());
@@ -869,6 +1207,12 @@ class ProtocolBench {
 }
 
 /* ---- formatting helpers --------------------------------------------------- */
+function fmtBytes(n){
+  if(!isFinite(n)||n<=0) return "?";
+  if(n>=1048576) return (n/1048576)+" MB";
+  if(n>=1024) return (n/1024)+" KB";
+  return n+" B";
+}
 function fmtHz(hz){
   if(!hz) return "? Hz";
   if(hz>=1e6) return (hz/1e6).toFixed(hz%1e6?2:0)+" MHz";
@@ -896,15 +1240,57 @@ class Analyzer {
   constructor(link, canvas, els){
     this.link=link; this.canvas=canvas;
     this.idEl=els.id; this.metaEl=els.meta; this.statusEl=els.status; this.autoEl=els.auto;
-    this.channels=8; this._reset(); this._drawLanes(8);
+    this.channels=8; this.proto="fala";       // "fala" (follow-along) or "sump" (standalone)
+    this.view=null;                            // {start,count} window into the capture
+    this.decode=null;                          // active decoder config
+    this.annos=[];                             // decoded annotations for the last capture
+    this._reset(); this._drawLanes(8);
   }
   _reset(){ this.acc=new Uint8Array(0); this.state="idle"; this.expected=0; this.dump=null; this.dumpLen=0; this.meta=null; this._warned=false; }
-  connectHooks(){ this.unsub=this.link.subscribe((u8)=>this.onData(u8)); this.probe(); }
+  connectHooks(){ this.unsub=this.link.subscribe((u8)=>this.onData(u8)); if(this.proto==="fala") this.probe(); }
   disconnectHooks(){ if(this.unsub){ this.unsub(); this.unsub=null; } clearTimeout(this._to); this._reset();
     this.idEl.textContent="No analyzer link."; this.metaEl.textContent=""; this.statusEl.textContent=""; this._drawLanes(8); }
   probe(){ this.link.write(new Uint8Array([0x3f])); }   // '?'
   request(){ this.link.write(new Uint8Array([0x2b])); } // '+'
   _auto(){ return this.autoEl ? this.autoEl.checked : true; }
+
+  // ---- SUMP standalone capture (arm and trigger without a terminal transaction) ----
+  async sumpArm(opts){
+    if(!this.link || !this.link.open) return;
+    this.proto="sump"; this._reset();
+    const rate=opts.rate, want=opts.samples;
+    const dv=sumpDividerFor(rate), cnt=sumpCountsFor(want);
+    const actualRate=sumpRateFor(dv);
+    for(let i=0;i<5;i++) await this.link.write(new Uint8Array([0x00]));    // RESET x5
+    await this.link.write(sumpLong(0x82, 0x38));                            // FLAGS: groups 1-3 off, 8 channels
+    await this.link.write(sumpLong(0x80, dv));                              // SET_SAMPLE_RATE
+    await this.link.write(sumpLong(0x81, (cnt.val & 0xffff) | ((cnt.val & 0xffff)<<16))); // COUNTS
+    if(opts.trigPin >= 0){
+      const mask = 1 << opts.trigPin;
+      const value = opts.trigLevel ? mask : 0;
+      await this.link.write(sumpLong(0xc0, mask));                          // BTRG0 mask
+      await this.link.write(sumpLong(0xc1, value));                         // BTRG0 value
+      await this.link.write(sumpLong(0xc2, 0x08000000));                    // BTRG0 config: start
+    }
+    this.channels=8;
+    this.meta={pins:8, speed:actualRate, samples:cnt.actual};
+    this.expected=cnt.actual; this.dump=new Uint8Array(cnt.actual); this.dumpLen=0; this.state="dump";
+    this.statusEl.textContent="Armed. Waiting for trigger, "+cnt.actual+" samples @ "+fmtHz(actualRate)+"...";
+    this.metaEl.textContent="";
+    await this.link.write(new Uint8Array([0x01]));                          // ARM
+    clearTimeout(this._to);
+    this._to=setTimeout(()=>{
+      if(this.state==="dump" && this.dumpLen===0){
+        this.statusEl.textContent="No data. Still waiting on the trigger, or the Bus Pirate is not in SUMP binmode.";
+      }
+    }, 4000);
+  }
+  sumpStop(){
+    if(!this.link || !this.link.open) return;
+    for(let i=0;i<5;i++) this.link.write(new Uint8Array([0x00]));
+    this._reset(); this.statusEl.textContent="Capture stopped.";
+  }
+  useFala(){ this.proto="fala"; this._reset(); this.statusEl.textContent=""; this.probe(); }
 
   onData(u8){
     const merged=new Uint8Array(this.acc.length+u8.length);
@@ -962,13 +1348,61 @@ class Analyzer {
   _onDumpComplete(){
     clearTimeout(this._to);
     const n=this.expected, speed=this.meta?this.meta.speed:0;
-    const s=this.dump.slice(0,n); s.reverse();  // newest-first to chronological
+    const s=this.dump.slice(0,n); s.reverse();  // newest-first to chronological (both FALA and SUMP)
     this.statusEl.textContent="";
     this.state="idle"; this.dump=null; this.dumpLen=0; this.expected=0;
     this.last={ samples:s, channels:this.channels, speed };  // retained for export
+    this.view={ start:0, count:s.length };                   // reset zoom on a new capture
+    this.runDecode();
     if(this.onCapture) this.onCapture();
-    this._render(s, this.channels, speed);
+    this.draw();
     beep(720,70);
+  }
+  // ---- decode ----
+  setDecode(cfg){ this.decode=cfg; this.runDecode(); this.draw(); }
+  runDecode(){
+    this.annos=[];
+    if(!this.last || !this.decode || this.decode.kind==="none") return;
+    const s=this.last.samples, d=this.decode;
+    try{
+      if(d.kind==="i2c")  this.annos=decodeI2C(s, d.sda, d.scl);
+      if(d.kind==="spi")  this.annos=decodeSPI(s, d.clk, d.mosi, d.miso, d.cs, d.cpol, d.cpha);
+      if(d.kind==="uart") this.annos=decodeUART(s, d.line, this.last.speed, d.baud);
+    }catch(e){ log("decode error", e); this.annos=[]; }
+  }
+  // ---- zoom and pan ----
+  _clampView(){
+    if(!this.last || !this.view) return;
+    const n=this.last.samples.length;
+    let {start,count}=this.view;
+    count=Math.max(8, Math.min(n, Math.round(count)));
+    start=Math.max(0, Math.min(n-count, Math.round(start)));
+    this.view={start,count};
+  }
+  zoomAt(frac, factor){
+    if(!this.last||!this.view) return;
+    const {start,count}=this.view;
+    const anchor=start + frac*count;
+    let nc=count*factor;
+    this.view={ start: anchor - frac*nc, count: nc };
+    this._clampView(); this.draw();
+  }
+  panBy(fracOfView){
+    if(!this.last||!this.view) return;
+    this.view.start += this.view.count*fracOfView;
+    this._clampView(); this.draw();
+  }
+  zoomFit(){ if(!this.last) return; this.view={start:0, count:this.last.samples.length}; this.draw(); }
+  draw(){
+    if(!this.last){ this._drawLanes(this.channels||8); return; }
+    this._render(this.last.samples, this.last.channels, this.last.speed);
+    if(this.onView) this.onView();
+  }
+  viewLabel(){
+    if(!this.last||!this.view) return "";
+    const sp=this.last.speed, {start,count}=this.view, n=this.last.samples.length;
+    const t0=sp?start/sp:0, dur=sp?count/sp:0;
+    return count+" / "+n+" samples  ("+fmtDur(dur)+" from "+fmtDur(t0)+")";
   }
   exportVCD(){
     if(!this.last) return;
@@ -994,8 +1428,13 @@ class Analyzer {
   }
   _render(samples, ch, speed){
     const n=samples.length; if(n===0){ this._drawLanes(ch); return; }
+    if(!this.view) this.view={start:0,count:n};
+    this._clampView();
+    const vs=this.view.start, vc=this.view.count;
     const c=this.canvas.getContext("2d"); const dpr=window.devicePixelRatio||1;
-    const W=760, laneH=26, padL=40, padR=8, H=ch*laneH+16, plotW=W-padL-padR;
+    const laneH=26, padL=40, padR=8, W=760;
+    const annH = (this.annos && this.annos.length) ? 22 : 0;   // decode ribbon
+    const H=ch*laneH+16+annH, plotW=W-padL-padR;
     this.canvas.width=W*dpr; this.canvas.height=H*dpr;
     this.canvas.style.aspectRatio=W+" / "+H; c.setTransform(dpr,0,0,dpr,0,0);
     const cs=getComputedStyle(document.body);
@@ -1003,30 +1442,67 @@ class Analyzer {
     const rule=cs.getPropertyValue("--rule").trim()||"#29333a";
     const muted=cs.getPropertyValue("--muted").trim()||"#8a958f";
     const trace=cs.getPropertyValue("--verdigris").trim()||"#52a598";
+    const brass=cs.getPropertyValue("--brass").trim()||"#c8a24a";
+    const alert=cs.getPropertyValue("--alert").trim()||"#cf5b5b";
+    const mono=cs.getPropertyValue("--mono");
+    const xOf=(i)=> padL + ((i-vs)/vc)*plotW;
     c.fillStyle=bg; c.fillRect(0,0,W,H);
+    // one pixel column per sample when zoomed in far enough to see edges exactly
     for(let b=0;b<ch;b++){
       const top=6+b*laneH, hi=top+2, lo=top+laneH-8;
       c.strokeStyle=rule; c.lineWidth=1;
-      c.beginPath(); c.moveTo(padL,lo); c.lineTo(W-padR,lo); c.stroke();       // baseline
-      c.fillStyle=muted; c.font="11px "+cs.getPropertyValue("--mono");
+      c.beginPath(); c.moveTo(padL,lo); c.lineTo(W-padR,lo); c.stroke();
+      c.fillStyle=muted; c.font="11px "+mono;
       c.fillText("IO"+b, 6, lo);
-      // step trace, nearest-sample decimation across pixel columns
       c.strokeStyle=trace; c.lineWidth=1.4; c.beginPath();
+      // Per-column aggregation: look at EVERY sample that falls in a pixel column,
+      // not just one. If a column contains both levels, draw a full-height riser so
+      // a one-sample glitch survives zoom-out instead of being decimated away.
       let prevY=null;
       for(let x=0;x<=plotW;x++){
-        const i=Math.min(n-1, Math.floor(x*n/plotW));
-        const bit=(samples[i]>>b)&1;
-        const y=bit?hi:lo, px=padL+x;
+        const i0=Math.max(0, Math.min(n-1, Math.floor(vs + x*vc/plotW)));
+        let i1=Math.max(0, Math.min(n,  Math.floor(vs + (x+1)*vc/plotW)));
+        if(i1<=i0) i1=i0+1;
+        let any0=false, any1=false;
+        for(let i=i0;i<i1 && i<n;i++){
+          if((samples[i]>>b)&1) any1=true; else any0=true;
+          if(any0&&any1) break;
+        }
+        const px=padL+x;
+        const lastBit=(samples[Math.min(n-1,i1-1)]>>b)&1;
+        const y=lastBit?hi:lo;
         if(prevY===null){ c.moveTo(px,y); }
-        else { c.lineTo(px,prevY); c.lineTo(px,y); }
+        else {
+          c.lineTo(px,prevY);
+          if(any0&&any1){ c.lineTo(px,hi); c.lineTo(px,lo); }  // activity in this column
+          c.lineTo(px,y);
+        }
         prevY=y;
       }
       c.stroke();
     }
-    // time axis label
-    c.fillStyle=muted; c.font="10px "+cs.getPropertyValue("--mono");
-    c.fillText("0", padL, H-2);
-    c.fillText(fmtDur(speed?n/speed:0), W-padR-46, H-2);
+    // decode annotations
+    if(annH){
+      const y=ch*laneH+8, h=16;
+      const colorFor=(k)=> k==="err" ? alert : (k==="frame" ? brass : (k==="ack" ? muted : trace));
+      c.font="10px "+mono; c.textBaseline="middle";
+      for(const a of this.annos){
+        if(a.e < vs || a.s > vs+vc) continue;         // outside the view
+        let x0=xOf(a.s), x1=xOf(a.e);
+        if(x1-x0 < 2) x1 = x0+2;
+        const col=colorFor(a.k);
+        c.globalAlpha=0.18; c.fillStyle=col; c.fillRect(x0, y, x1-x0, h); c.globalAlpha=1;
+        c.strokeStyle=col; c.lineWidth=1; c.strokeRect(x0+0.5, y+0.5, Math.max(1,x1-x0-1), h-1);
+        const w=c.measureText(a.t).width;
+        if(w < (x1-x0)-4){ c.fillStyle=col; c.fillText(a.t, x0+((x1-x0)-w)/2, y+h/2); }
+      }
+      c.textBaseline="top";
+    }
+    // time axis: label the view window, not the whole capture
+    c.fillStyle=muted; c.font="10px "+mono;
+    c.fillText(fmtDur(speed?vs/speed:0), padL, H-2);
+    const rt=fmtDur(speed?(vs+vc)/speed:0);
+    c.fillText(rt, W-padR-c.measureText(rt).width, H-2);
   }
 }
 
@@ -1099,6 +1575,7 @@ const App = {
         if(b.dataset.macro==="i2cscan") this.bench.i2cScan();
         if(b.dataset.macro==="spijedec") this.bench.spiJedec();
         if(b.dataset.macro==="uartbridge") this.bench.uartBridge();
+        if(b.dataset.macro==="voltages") this.readVoltages();
       });
     });
     const send=()=>{ const v=$("cmd-input").value.trim(); if(v){ this.bench.raw(v); $("cmd-input").value=""; } };
@@ -1109,9 +1586,89 @@ const App = {
     $("spi-input").addEventListener("keydown",(e)=>{ if(e.key==="Enter") spiSend(); });
 
     // analyzer export: enabled once a capture exists, stays available after disconnect
-    this.analyzer.onCapture=()=>{ $("scope-vcd").disabled=false; $("scope-csv").disabled=false; };
+    this.analyzer.onCapture=()=>{
+      ["scope-vcd","scope-csv","zoom-in","zoom-out","zoom-fit"].forEach(id=>$(id).disabled=false);
+      $("view-label").textContent=this.analyzer.viewLabel();
+    };
+    this.analyzer.onView=()=>{ $("view-label").textContent=this.analyzer.viewLabel(); };
     $("scope-vcd").addEventListener("click", ()=>this.analyzer.exportVCD());
     $("scope-csv").addEventListener("click", ()=>this.analyzer.exportCSV());
+
+    // ---- zoom and pan ----
+    $("zoom-in").addEventListener("click", ()=>this.analyzer.zoomAt(0.5, 1/1.6));
+    $("zoom-out").addEventListener("click",()=>this.analyzer.zoomAt(0.5, 1.6));
+    $("zoom-fit").addEventListener("click",()=>this.analyzer.zoomFit());
+    const cv=$("scope-canvas");
+    cv.addEventListener("wheel",(e)=>{
+      if(!this.analyzer.last) return;
+      e.preventDefault();
+      const r=cv.getBoundingClientRect();
+      const frac=Math.max(0, Math.min(1, (e.clientX-r.left)/r.width));
+      this.analyzer.zoomAt(frac, e.deltaY>0 ? 1.25 : 1/1.25);
+    }, {passive:false});
+    let drag=null;
+    cv.addEventListener("pointerdown",(e)=>{
+      if(!this.analyzer.last) return;
+      drag={x:e.clientX, w:cv.getBoundingClientRect().width};
+      cv.classList.add("dragging"); cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener("pointermove",(e)=>{
+      if(!drag) return;
+      const dx=e.clientX-drag.x; drag.x=e.clientX;
+      this.analyzer.panBy(-dx/drag.w);
+    });
+    const endDrag=()=>{ drag=null; cv.classList.remove("dragging"); };
+    cv.addEventListener("pointerup", endDrag);
+    cv.addEventListener("pointercancel", endDrag);
+
+    // ---- decode ----
+    const applyDecode=()=>{
+      const k=$("dec-kind").value;
+      $("dec-uart").style.display = (k==="uart") ? "flex" : "none";
+      $("dec-spi").style.display  = (k==="spi")  ? "flex" : "none";
+      let cfg={kind:k};
+      if(k==="i2c")  cfg={kind:"i2c", sda:0, scl:1};                       // PIN_MAP.I2C
+      if(k==="spi"){
+        const m=parseInt($("dec-spimode").value,10);
+        cfg={kind:"spi", clk:6, mosi:7, miso:4, cs:5, cpol:(m>>1)&1, cpha:m&1};  // PIN_MAP.SPI
+      }
+      if(k==="uart") cfg={kind:"uart", line:5, baud:parseInt($("dec-baud").value,10)}; // RX on IO5
+      this.analyzer.setDecode(cfg);
+    };
+    $("dec-kind").addEventListener("change", applyDecode);
+    $("dec-baud").addEventListener("change", applyDecode);
+    $("dec-spimode").addEventListener("change", applyDecode);
+
+    // ---- SUMP standalone capture ----
+    const srcChange=()=>{
+      const sump = $("scope-src").value==="sump";
+      $("sump-controls").style.display = sump ? "flex" : "none";
+      $("scope-capture").style.display = sump ? "none" : "";
+      $("scope-auto").parentElement.style.display = sump ? "none" : "";
+      if(sump) this.analyzer.proto="sump"; else this.analyzer.useFala();
+      this._updateScopeButtons();
+    };
+    $("scope-src").addEventListener("change", srcChange);
+    $("sump-arm").addEventListener("click", ()=>{
+      this.analyzer.sumpArm({
+        rate: parseInt($("sump-rate").value,10),
+        samples: parseInt($("sump-samples").value,10),
+        trigPin: parseInt($("sump-trigpin").value,10),
+        trigLevel: parseInt($("sump-triglvl").value,10)
+      });
+    });
+    $("sump-stop").addEventListener("click", ()=>this.analyzer.sumpStop());
+
+    // ---- bench presets ----
+    this.renderPresets();
+    $("preset-save").addEventListener("click", ()=>{
+      const name=$("preset-name").value.trim(), cmd=$("cmd-input").value.trim();
+      if(!name || !cmd){ this.bench.print("Type a command below and a name above, then Save."); return; }
+      const ps=store.get("presets",[]);
+      ps.push({name, cmd}); store.set("presets", ps);
+      $("preset-name").value="";
+      this.renderPresets();
+    });
 
     document.querySelectorAll(".collapse").forEach(b=>{
       b.addEventListener("click",()=>{ const c=$(b.dataset.target); c.classList.toggle("collapsed"); b.textContent=c.classList.contains("collapsed")?"+":"-"; });
@@ -1154,18 +1711,49 @@ const App = {
   },
   _sniffMode(s){
     const m=stripAnsi(s).match(PROMPT_RE);
-    if(m){ const key=m[1].toUpperCase(); if(key!==this.currentMode){ this.currentMode=key; this.renderPins(key); } }
+    if(m){ const key=m[1].toUpperCase(); if(key!==this.currentMode){ this.currentMode=key; this.volts=null; this.renderPins(key); } }
   },
   renderPins(modeKey){
     const el=$("pin-panel"); if(!el) return;
     const map=PIN_MAP[modeKey]||{};
+    const v=this.volts||{};
     let html='<div class="pmode">Pins in '+modeKey.replace("HIZ","HiZ")+' mode</div>';
     for(let i=0;i<8;i++){
       const role=map[i];
+      const volt=(v[i]!==undefined) ? v[i].toFixed(1)+"V" : "";
       html+='<div class="pin-chip'+(role?" active":"")+'">'+
-            '<div class="io">IO'+i+'</div><div class="role">'+(role||"")+'</div></div>';
+            '<div class="io">IO'+i+'</div><div class="role">'+(role||"")+'</div>'+
+            '<div class="volt">'+volt+'</div></div>';
     }
     el.innerHTML=html; el.classList.add("on");
+  },
+  async readVoltages(){
+    const v=await this.bench.readVoltages();
+    if(v){ this.volts=v; this.renderPins(this.currentMode); }
+  },
+  renderPresets(){
+    const el=$("preset-list"); if(!el) return;
+    const ps=store.get("presets",[]);
+    el.innerHTML="";
+    ps.forEach((p,idx)=>{
+      const wrap=document.createElement("span"); wrap.className="preset";
+      const run=document.createElement("button");
+      run.className="run"; run.textContent=p.name; run.title=p.cmd;
+      run.addEventListener("click", ()=>{ if(this.termLink) this.bench.raw(p.cmd); });
+      const del=document.createElement("button");
+      del.className="del"; del.textContent="x"; del.title="Delete preset";
+      del.addEventListener("click", ()=>{
+        const cur=store.get("presets",[]); cur.splice(idx,1); store.set("presets",cur); this.renderPresets();
+      });
+      wrap.appendChild(run); wrap.appendChild(del); el.appendChild(wrap);
+    });
+  },
+  _updateScopeButtons(){
+    const live = !!(this.scopeLink && this.scopeLink.open);
+    const sump = $("scope-src").value==="sump";
+    $("scope-capture").disabled = !live || sump;
+    $("sump-arm").disabled = !live || !sump;
+    $("sump-stop").disabled = !live || !sump;
   },
   // ---- role assignment (dynamic: either physical link can play either role) ----
   assignTerminal(link){
@@ -1228,11 +1816,23 @@ const App = {
     this._updateAutoPair();
   },
   _probeLink(link){
+    // Poll for a verdict instead of sleeping a fixed window: a port that identifies
+    // itself immediately is assigned immediately, and only a silent or ambiguous
+    // port waits out the full budget.
     return new Promise((resolve)=>{
       let raw="";
       const unsub=link.subscribe((s)=>{ raw += (typeof s==="string") ? s : new TextDecoder().decode(s); });
       link.write("\r");
-      setTimeout(()=>{ unsub(); resolve({ role:classifyPortText(raw), raw }); }, 650);
+      const t0=Date.now();
+      const tick=()=>{
+        const role=classifyPortText(raw);
+        const decided = raw.length>0 && role!=="unknown";
+        if(decided || Date.now()-t0 >= TIMING.probeMaxMs){
+          unsub(); return resolve({ role:classifyPortText(raw), raw, ms:Date.now()-t0 });
+        }
+        setTimeout(tick, TIMING.probeStepMs);
+      };
+      setTimeout(tick, TIMING.probeStepMs);
     });
   },
   _updateAutoPair(){
@@ -1273,8 +1873,8 @@ const App = {
     $("term-warn").style.display="none";
     document.querySelectorAll("[data-macro]").forEach(b=>b.disabled=true);
   },
-  afterConnB(){ $("conn-b").disabled=true; $("disc-b").disabled=false; $("scope-capture").disabled=false; },
-  afterDiscB(){ $("conn-b").disabled=false; $("disc-b").disabled=true; $("scope-capture").disabled=true; },
+  afterConnB(){ $("conn-b").disabled=true; $("disc-b").disabled=false; this._updateScopeButtons(); },
+  afterDiscB(){ $("conn-b").disabled=false; $("disc-b").disabled=true; this._updateScopeButtons(); },
   modal(title, body){ $("modal-title").textContent=title; $("modal-body").innerHTML="<pre></pre>"; $("modal-body").querySelector("pre").textContent=body; $("modal-back").classList.add("open"); }
 };
 
@@ -1291,23 +1891,78 @@ const ABOUT_TEXT =
 "FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.\n\n"+
 "You should have received a copy of the GNU General Public License along with\n"+
 "this program. If not, see the file COPYING distributed with this program.\n\n"+
-"Known limitations (v1.0.0):\n"+
+"Known limitations (v1.1.0):\n"+
 "- Web Serial only: Chrome, Edge, or Opera on desktop, over HTTPS or localhost.\n"+
 "- Auto-pair opens each port and probes it to assign the terminal and analyzer\n"+
 "  roles. If a port cannot be classified, connect that role by hand.\n"+
 "- The terminal is a VT100 subset; some rare escape sequences are ignored.\n"+
-"- The pin panel shows the fixed per-mode labels from the firmware. Live pin\n"+
-"  voltages stay on the device LCD and statusbar.\n"+
 "- Bench macros accept menu defaults; non-default speeds or bits need the raw line.\n"+
 "- SPI byte parsing extracts every 0xNN token, so the command echo can appear with\n"+
 "  read data. The raw reply is shown too.\n"+
 "- The UART bridge is transparent and can only be exited by pressing the physical\n"+
 "  button on the Bus Pirate.\n"+
-"- The analyzer uses FALA. Set the Bus Pirate binmode to Follow along logic\n"+
-"  analyzer first, then run a transaction on the terminal.\n"+
-"- VCD and CSV export the last capture; very long captures make large files.\n"+
-"- Standalone SUMP capture (arm and trigger without a terminal transaction) is out\n"+
-"  of scope for the 1.0 MVP; use PulseView for that workflow.";
+"- Capture source: FALA follows each terminal transaction; SUMP arms and triggers\n"+
+"  standalone. Set the matching binmode on the device first. SUMP rounds the sample\n"+
+"  count to a multiple of 4 and the rate to the nearest 100MHz/(n+1) divider.\n"+
+"- SUMP basic triggers only (one pin, one level). Advanced triggers are not\n"+
+"  implemented in the firmware.\n"+
+"- Decoders read the standard per-mode pins (I2C: SDA IO0, SCL IO1; SPI: IO4-7;\n"+
+"  UART: RX IO5). Custom pin assignments are not selectable yet.\n"+
+"- The UART decoder assumes 8N1 and needs at least 2 samples per bit.\n"+
+"- Zoom decimates to the plot width; zoom in to resolve very short glitches.\n"+
+"- Voltages come from the firmware `v` command, read on demand rather than live.\n"+
+"- VCD and CSV export the whole last capture, not the zoomed view.";
+
+/* ---- test signal synthesis (used by the self-test harness) ----------------- */
+// Build an I2C waveform: SDA=bit0, SCL=bit1. 4 samples per half-bit.
+function synthI2C(addr, rw, bytes){
+  const s=[]; const Q=4;
+  let sda=1, scl=1;
+  const push=(n)=>{ for(let i=0;i<n;i++) s.push((scl<<1)|sda); };
+  push(Q);
+  sda=0; push(Q);                                   // START: SDA falls while SCL high
+  const send=(byte, ackBit)=>{
+    for(let b=7;b>=0;b--){
+      scl=0; push(Q);
+      sda=(byte>>b)&1; push(Q);                     // set data while SCL low
+      scl=1; push(Q*2);                             // rising edge samples it
+    }
+    scl=0; push(Q); sda=ackBit; push(Q); scl=1; push(Q*2);   // ACK/NAK bit
+  };
+  send((addr<<1)|rw, 0);
+  for(const by of bytes) send(by, 0);
+  scl=0; push(Q); sda=0; push(Q); scl=1; push(Q);   // set up STOP
+  sda=1; push(Q*2);                                 // STOP: SDA rises while SCL high
+  return Uint8Array.from(s);
+}
+// Build a SPI mode-0 waveform: CLK=6, MOSI=7, MISO=4, CS=5.
+function synthSPI(bytes){
+  const s=[]; const Q=4;
+  let clk=0, mosi=0, miso=0, cs=1;
+  const push=(n)=>{ for(let i=0;i<n;i++) s.push((cs<<5)|(clk<<6)|(mosi<<7)|(miso<<4)); };
+  push(Q);
+  cs=0; push(Q);                                    // assert CS
+  for(const by of bytes){
+    for(let b=7;b>=0;b--){
+      clk=0; mosi=(by>>b)&1; miso=mosi; push(Q);    // data set on falling/low
+      clk=1; push(Q);                               // rising edge captures
+    }
+  }
+  clk=0; push(Q); cs=1; push(Q*2);                  // release CS
+  return Uint8Array.from(s);
+}
+// Build a UART 8N1 waveform on IO5 at `spb` samples per bit (idle high).
+function synthUART(bytes, spb){
+  const s=[];
+  const push=(lvl,n)=>{ for(let i=0;i<n;i++) s.push(lvl?(1<<5):0); };
+  push(1, spb*2);                                   // idle
+  for(const by of bytes){
+    push(0, spb);                                   // start bit
+    for(let b=0;b<8;b++) push((by>>b)&1, spb);      // LSB first
+    push(1, spb*2);                                 // stop + idle
+  }
+  return Uint8Array.from(s);
+}
 
 /* ---- self-test (?test=1): assert the ANSI emulator core -------------------- */
 function runTests(){
@@ -1375,6 +2030,32 @@ function runTests(){
   check("decide both-free binmode", decideRole("binmode",true,true)==="analyzer");
   check("decide term-taken", decideRole("terminal",false,true)==="analyzer");
   check("decide scope-taken", decideRole("binmode",true,false)==="terminal");
+
+  // ---- v1.1: decoders ----
+  const i2c=decodeI2C(synthI2C(0x50,0,[0xAB]), 0, 1);
+  check("I2C decodes START", i2c.some(a=>a.t==="START"));
+  check("I2C decodes address+W", i2c.some(a=>a.k==="addr" && a.t==="0x50 W"));
+  check("I2C decodes ACK", i2c.some(a=>a.t==="ACK"));
+  check("I2C decodes data byte", i2c.some(a=>a.k==="data" && a.t==="0xab"));
+  check("I2C decodes STOP", i2c.some(a=>a.t==="STOP"));
+
+  const spi=decodeSPI(synthSPI([0x9F,0xEF]), 6, 7, 4, 5, 0, 0);
+  check("SPI decodes CS frame", spi.some(a=>a.t==="CS"));
+  check("SPI decodes bytes", spi.filter(a=>a.k==="data").length===2 && spi.filter(a=>a.k==="data")[0].t.indexOf("0x9f")===0);
+
+  const ua=decodeUART(synthUART([0x41], 16), 5, 16*9600, 9600);
+  check("UART decodes byte + ascii", ua.length===1 && ua[0].t==="0x41 'A'");
+
+  // ---- v1.1: SUMP math ----
+  check("SUMP divider for 4MHz", sumpDividerFor(4000000)===24);         // 100e6/25 = 4MHz
+  check("SUMP rate round-trip", sumpRateFor(sumpDividerFor(4000000))===4000000);
+  check("SUMP counts multiple of 4", sumpCountsFor(16384).actual===16384 && sumpCountsFor(16384).val===4095);
+  check("SUMP long cmd LE", Array.from(sumpLong(0x80, 0x01020304)).join(",")==="128,4,3,2,1");
+
+  // ---- v1.1: voltages ----
+  const vtxt="IO0\tIO1\tIO2\tIO3\tIO4\tIO5\tIO6\tIO7\r\nSDA\tSCL\t-\t-\t-\t-\t-\t-\r\n3.3V\t0.0V\t1.8V\t0.0V\t0.0V\t0.0V\t0.0V\t5.0V\r\n";
+  const vv=parseVoltages(vtxt);
+  check("voltages parsed", vv && vv[0]===3.3 && vv[2]===1.8 && vv[7]===5.0);
 
   const pass=results.filter(r=>r[1]).length;
   out.innerHTML="<h2>BINNACLE self-test</h2>"+

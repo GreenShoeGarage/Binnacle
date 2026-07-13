@@ -8,8 +8,8 @@ runs a follow-along logic analyzer that captures and draws whatever bus transact
 you just ran. The name is the brass housing that holds a ship's compass and deck
 instruments, which suits a console for a device literally called the Bus Pirate.
 
-v1.0 is the MVP milestone: terminal, protocol bench, follow-along analyzer with
-export, per-mode pin labels, and one-click port pairing, all in a single file.
+v1.1 adds waveform zoom and pan with I2C, SPI, and UART decode overlays, standalone
+SUMP capture, saved bench presets, and live pin voltages, on top of the v1.0 MVP.
 
 ## Requirements
 
@@ -71,32 +71,58 @@ the reply. v0.3 ships:
 - UART bridge: enters UART mode and starts the transparent bridge. The bridge can
   only be exited by pressing the physical button on the Bus Pirate; there is no
   host side escape, so BINNACLE says so plainly.
-- Raw command sender.
+- Read voltages: runs the firmware `v` command and shows each pin's voltage on the
+  pin panel, read on demand rather than live.
+- Raw command sender, with saved presets. Type a command, give it a name, and Save;
+  it becomes a one-click button that persists across sessions.
 
 Replies are scraped from text, so non-default speeds or bit widths still need the
 raw command line, and the raw device reply is shown alongside parsed results.
 
-## Logic analyzer (FALA)
+## Logic analyzer
 
-The analyzer speaks the Bus Pirate follow-along logic analyzer protocol (FALA) on
-the binmode port. Set it up once:
+The analyzer reads the binmode port and offers two capture sources.
 
-1. On the terminal, type `binmode` and choose Follow along logic analyzer.
-2. Connect the analyzer port in BINNACLE.
-3. Run any bus transaction on the terminal.
+### FALA (follow along)
 
-After each transaction the Bus Pirate emits a `$FALADATA` metadata line on the
-binmode port. With Auto-follow on (the default), BINNACLE requests the sample
-buffer, decodes it, and draws eight lanes. Bit 0 of each sample is IO0 and bit 7
-is IO7. Samples arrive newest first and are shown oldest to newest. Capture now
-re-requests the most recent capture on demand.
+Set the Bus Pirate binmode to Follow along logic analyzer, connect the analyzer
+port, and run any bus transaction on the terminal. The device emits a `$FALADATA`
+metadata line, BINNACLE pulls the sample buffer, decodes it, and draws eight lanes.
+Bit 0 of each sample is IO0 and bit 7 is IO7. With Auto-follow on (the default),
+each transaction paints itself. Capture now re-requests the most recent capture.
+
+### SUMP (standalone)
+
+Set the Bus Pirate binmode to the SUMP logic analyzer, choose SUMP as the capture
+source, then pick a sample rate, a sample count, and an optional trigger pin and
+level. Arm starts the capture; the device waits for the trigger (or free-runs if
+the trigger is None) and dumps when it is done. This is how you watch a target that
+talks on its own, without running a terminal transaction.
+
+The device rounds the sample count to a multiple of 4 and the rate to the nearest
+100MHz/(n+1) divider, so the readout may differ slightly from what you asked for.
+Only basic triggers are available: one pin, one level. The firmware does not
+implement advanced triggers.
+
+### Zoom, pan, and decode
+
+Scroll to zoom around the cursor, drag to pan, or use the plus, minus, and Fit
+buttons. The time axis labels the visible window. Each pixel column aggregates every
+sample it covers rather than picking one, so a single-sample glitch still appears as
+a riser when you are zoomed out. Zoom in to resolve its exact width.
+
+Choose a decoder to annotate the waveform with what the bus actually said. I2C marks
+START, the address with its read/write bit, each data byte, and ACK or NAK. SPI marks
+chip select and each byte (MOSI and MISO). UART marks each byte with its ASCII
+character where printable. Decoders read the standard per-mode pins (I2C: SDA on IO0,
+SCL on IO1; SPI: IO4 through IO7; UART: RX on IO5). The UART decoder assumes 8N1 and
+needs at least two samples per bit.
 
 ### Export
 
 Export VCD writes a change-only Value Change Dump with a 1 ps timescale, ready for
-GTKWave or PulseView. Export CSV writes one row per sample with a time column and
-one column per channel. Both act on the last capture and stay available after the
-analyzer disconnects.
+GTKWave or PulseView. Export CSV writes one row per sample. Both act on the whole
+last capture, not the zoomed view, and stay available after the analyzer disconnects.
 
 ## Configuration
 
@@ -106,6 +132,9 @@ Constants at the top of the script:
 - `FEEDBACK_EMAIL` the address the Feedback button opens. Set this to your own.
 - `BP5_USB` a soft USB vendor filter for the port chooser. Selection stays open.
 - `COLS`, `ROWS`, `FONT_PX` terminal grid geometry.
+- `TIMING` probe and menu-walk budgets. Mode entry and port probing are prompt-driven
+  and resolve as soon as the device answers, so these act as safety nets rather than
+  fixed waits.
 
 ## URL flags
 
@@ -117,8 +146,10 @@ Constants at the top of the script:
 Open `binnacle.html?test=1`. The harness asserts the VT100 emulator, the value
 formatters, the FALA state machine (metadata parsing, buffer request, chronological
 reversal, and delivery split across multiple serial reads), the I2C scan parser,
-SPI byte extraction, the VCD and CSV generators, the port role classifier, the auto-pair role decision, and the per-mode pin map. A browser-runnable test
-harness is required before every release.
+SPI byte extraction, the VCD and CSV generators, the port role classifier, the auto-pair role decision, the per-mode pin map, the SPI TX/RX reply parser, the
+menu-prompt detection used for mode entry, the SUMP rate and count framing, and the
+glitch-preserving column aggregation. A browser-runnable test harness is required
+before every release.
 
 ## Versioning and snapshots
 
@@ -126,29 +157,33 @@ The version appears in the footer and in a build marker comment immediately afte
 the DOCTYPE. Keep a per-release file snapshot and archive old builds rather than
 deleting them.
 
-## Known limitations (v1.0.0)
+## Known limitations (v1.1.0)
 
 - Web Serial only: Chrome, Edge, or Opera on desktop, over HTTPS or localhost.
 - Auto-pair opens each port and probes it to assign roles. If a port cannot be
   classified, connect that role by hand.
 - The terminal is a VT100 subset; some rare escape sequences are ignored.
-- The pin panel shows the fixed per-mode labels from the firmware. Live pin voltages
-  stay on the device LCD and statusbar.
-- Bench macros accept menu defaults; non-default speeds or bits need the raw line.
-- SPI byte parsing extracts every 0xNN token, so the command echo can appear with
-  read data. The raw reply is shown too.
+- Mode entry is prompt-driven: each submenu question is answered with its default as
+  soon as it appears. Non-default speeds or bit widths need the raw command line.
+- SPI read bytes come from the firmware's TX/RX labels, so the command echo is not
+  mixed into the read data. If a reply carries no labels, BINNACLE lists every 0xNN
+  token and says so.
 - The UART bridge is transparent and can only be exited by pressing the physical
   button on the Bus Pirate.
-- The analyzer uses FALA. Set the Bus Pirate binmode to Follow along logic analyzer
-  first, then run a transaction on the terminal.
-- VCD and CSV export the last capture; very long captures make large files.
-- Standalone SUMP capture is out of scope for the 1.0 MVP; use PulseView for that.
+- SUMP rounds the sample count to a multiple of 4 and the rate to the nearest
+  100MHz/(n+1) divider. Basic triggers only: one pin, one level.
+- Decoders use the standard per-mode pins; custom pin assignments are not selectable
+  yet. The UART decoder assumes 8N1 and needs at least two samples per bit.
+- Zoomed-out columns aggregate every sample they cover, so a single-sample glitch
+  still draws as a riser. Zoom in to resolve its exact width.
+- Voltages are read on demand from the `v` command, not streamed live.
+- VCD and CSV export the whole last capture, not the zoomed view.
 
-## Beyond 1.0
+## Beyond 1.1
 
-v1.0 is the MVP and a deliberate pause. Candidate future work, none committed:
-standalone SUMP capture, analyzer zoom and pan with protocol decode overlays, live
-per-mode pin voltages, and saved bench macro presets.
+Nothing committed. Candidates: custom decoder pin assignment, decoder annotations in
+the CSV and VCD exports, exporting only the zoomed view, streaming live voltages, and
+saved mode setups alongside command presets.
 
 ## License
 
